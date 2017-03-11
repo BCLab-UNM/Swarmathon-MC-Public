@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
 // This block passes the goal location to the proportional-integral-derivative
 // controllers in the abridge package.
 void mobilityStateMachine(const ros::TimerEvent&) {
-
+    
     std_msgs::String stateMachineMsg;
     float rotateOnlyAngleTolerance = 0.4;
     int returnToSearchDelay = 5;
@@ -570,7 +570,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
         // if we see the center and we dont have a target collected
         if (centerSeen && !targetCollected) {
 
-            float centeringTurn = 0.15; //radians
+            /*float centeringTurn = 0.15; //radians
             stateMachineState = STATE_MACHINE_TRANSFORM;
 
             // this code keeps the robot from driving over
@@ -589,7 +589,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
             goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
 
             targetDetected = false;
-            pickUpController.reset();
+            pickUpController.reset();*/
 
             return;
         }

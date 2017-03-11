@@ -2,6 +2,9 @@
 
 SearchController::SearchController() {
   rng = new random_numbers::RandomNumberGenerator();
+  this->first = true;
+  this->numOfItr = 0;
+  this->ratio = 0.5;
 }
 
 /**
@@ -9,15 +12,29 @@ SearchController::SearchController() {
  */
 geometry_msgs::Pose2D SearchController::search(geometry_msgs::Pose2D currentLocation) {
   geometry_msgs::Pose2D goalLocation;
+    if(this->first)
+    {
+      //currentLocation.theta = 0;
+       goalLocation.theta = 0;
+      this->first = false;
+    }
+    else
+    {
+        //select new heading from Gaussian distribution around current heading
+        goalLocation.theta = currentLocation.theta + (3.14/2);//rng->gaussianussian(currentLocation.theta, 0.25);
+    }
 
-  //select new heading from Gaussian distribution around current heading
-  goalLocation.theta = rng->gaussian(currentLocation.theta, 0.25);
+    if(this->numOfItr == 2){
+        this->ratio += 0.5;
+        this->numOfItr = 0;
+    }
 
-  //select new position 50 cm from current location
-  goalLocation.x = currentLocation.x + (0.5 * cos(goalLocation.theta));
-  goalLocation.y = currentLocation.y + (0.5 * sin(goalLocation.theta));
+    //select new position 50 cm from current location
+    goalLocation.x = currentLocation.x + (ratio * cos(goalLocation.theta));
+    goalLocation.y = currentLocation.y + (ratio* sin(goalLocation.theta));
+    this->numOfItr++;
 
-  return goalLocation;
+    return goalLocation;
 }
 
 /**

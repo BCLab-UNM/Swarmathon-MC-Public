@@ -21,8 +21,10 @@ class SearchController {
     geometry_msgs::Pose2D continueInterruptedSearch(geometry_msgs::Pose2D currentLocation, geometry_msgs::Pose2D oldGoalLocation);
 
   private:
-
+    double ratio;
+    int numOfItr;
     random_numbers::RandomNumberGenerator* rng;
+    bool first;
 };
 
 #endif /* SEARCH_CONTROLLER */
