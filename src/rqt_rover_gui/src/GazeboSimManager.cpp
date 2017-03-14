@@ -12,6 +12,7 @@ GazeboSimManager::GazeboSimManager()
     gazebo_client_process = NULL;
     gazebo_server_process = NULL;
     command_process = NULL;
+    hive_server_process = NULL;
 
     // Set the app_root by reading the evvironment variable SWARMATHON_APP_ROOT ideally set by the run.sh script.
     const char *name = "SWARMATHON_APP_ROOT";
@@ -387,5 +388,43 @@ GazeboSimManager::~GazeboSimManager()
     delete command_process;
 }
 
+/*===========================================================================*/
+/*===================Hive Server Set up and tear down =======================*/
+/*===========================================================================*/
+
+// Load a default world path unless a custom path has been specified
+QString GazeboSimManager::startHiveServer()
+{
+    if (hive_server_process != NULL) return ("<br><font color='yellow'> Hive already started </font><br>");
+
+    hive_server_process = new QProcess();
+
+    QString command = QString("rosrun hive hive HiveService");
+
+    hive_server_process->startDetached(command);
+
+    hive_server_process->waitForStarted();
+
+    QString return_msg = "<br><font color='yellow'> Started the Hive </font><br>";
+
+    return return_msg;
+}
+
+QString GazeboSimManager::stopHiveServer()
+{
+    if (hive_server_process == NULL) return "Hive server is not running";
+
+    QString argument = "pkill HiveService";
+    QProcess sh;
+    sh.start("sh", QStringList() << "-c" << argument);
+    sh.waitForFinished();
+    QString output = sh.readAll();
+    sh.close();
+
+    hive_server_process->close();
+    QString return_msg = "<br><font color='yellow'>" + output + "</font><br>";
+
+    return return_msg;
+}
 
 

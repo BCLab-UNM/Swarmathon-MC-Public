@@ -1737,10 +1737,16 @@ void RoverGUIPlugin::buildSimulationButtonEventHandler()
     ui.simulation_timer_combo_box->setEnabled(true);
     ui.simulation_timer_combo_box->setStyleSheet("color: white; border:1px solid white; padding: 1px 0px 1px 3px");
 
+    //start hive server here
+
    emit sendInfoLogMessage("Finished building simulation.");
 
    // Visualize the simulation by default call button event handler
    visualizeSimulationButtonEventHandler();
+
+   //call hive server start
+   return_msg = sim_mgr.startHiveServer();
+   emit sendInfoLogMessage(return_msg);
 }
 
 void RoverGUIPlugin::clearSimulationButtonEventHandler()
@@ -1840,6 +1846,8 @@ void RoverGUIPlugin::clearSimulationButtonEventHandler()
 	it->second.shutdown();
       }
     control_mode_publishers.clear();
+    return_msg += sim_mgr.stopHiveServer();
+    return_msg += "<br>";
 
     return_msg += sim_mgr.stopGazeboClient();
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);

@@ -1,18 +1,19 @@
 #include "SearchController.h"
 
+
+
 SearchController::SearchController() {
   rng = new random_numbers::RandomNumberGenerator();
   this->first = true;
   this->numOfItr = 0;
   this->ratio = 0.5;
 
-
 }
 
 /**
  * This code implements a basic random walk search.
  */
-geometry_msgs::Pose2D SearchController::search(geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation) {
+geometry_msgs::Pose2D SearchController::search(int counter, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation) {
   geometry_msgs::Pose2D goalLocation;
 
    ROS_INFO("heySearch");
@@ -20,7 +21,7 @@ geometry_msgs::Pose2D SearchController::search(geometry_msgs::Pose2D centerLocat
     if(this->first)
     {
       //currentLocation.theta = 0;
-      goalLocation.theta = 0;
+      goalLocation.theta = (3.14/2)*counter;
       this->first = false;
       this->stop = false;
     }
@@ -28,9 +29,9 @@ geometry_msgs::Pose2D SearchController::search(geometry_msgs::Pose2D centerLocat
     {
         //select new heading from Gaussian distribution around current heading
         goalLocation.theta = currentLocation.theta + (3.14/2);//rng->gaussianussian(currentLocation.theta, 0.25);
-        if(currentLocation.theta >= (3.14/2)*4){
+        /*if(currentLocation.theta >= (3.14/2)*4){
             goalLocation.theta = 0;
-        }
+        }*/
     }
 
     if(this->numOfItr == 2){

@@ -17,10 +17,11 @@ class SearchController {
     SearchController();
 
     // performs search pattern
-    geometry_msgs::Pose2D search(geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation);
+    geometry_msgs::Pose2D search(int counter, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation);
 
     // continues search pattern after interruption
     geometry_msgs::Pose2D continueInterruptedSearch(geometry_msgs::Pose2D currentLocation, geometry_msgs::Pose2D oldGoalLocation);
+
 
   private:
     double ratio;
@@ -28,8 +29,8 @@ class SearchController {
     random_numbers::RandomNumberGenerator* rng;
     bool first;
     bool stop;
+    int direction;
 
 
 };
-
 #endif /* SEARCH_CONTROLLER */
