@@ -67,8 +67,9 @@ int main(int argc, char **argv){
 
     //using the node handle add a new service. The parameters are the name(important) and callback method
     //Use this name to call the service "hive_service_add" (basically will call the add mnethod)
-    n.advertiseService("hive_service_add", add);
-    n.advertiseService("hive_add_robot", addRobot);
+    ros::ServiceServer s1 = n.advertiseService("hive_service_add", add);
+    //have to have a ServiceServer even though never used
+    ros::ServiceServer s2 = n.advertiseService("hive_add_robot", addRobot);
 
     ROS_INFO("Ready to add two ints.");
 

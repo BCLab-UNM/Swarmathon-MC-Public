@@ -255,6 +255,7 @@ int main(int argc, char **argv) {
 
     //==================hive server code===========
     client = mNH.serviceClient<hive::hiveSrv>("hive_service_add");
+    client.waitForExistence(); //<--wait for existance maybe??
     ros::ServiceClient sc = mNH.serviceClient<hive::hiveAddRobot>("hive_add_robot");
 
 
@@ -413,7 +414,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     ROS_INFO("Sum: %ld", srv.response.sum);
                 } else {
                     ROS_INFO("Failed to call service add_two_ints");
-                    //return;
+                    return;
                 }
                 ROS_INFO("Sum: %ld", srv.response.sum);
                 goalLocation = searchController.search(id, centerLocationOdom, currentLocation);
