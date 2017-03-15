@@ -1,32 +1,3 @@
-#include "ros/ros.h"
-#include "hive/hiveSrv.h" //this is an import for the .srv file that has to be written to create a new service
-
-/**
- * call back method for the service. req contains the request fields that
- * were specified in the .srv file. res contains fields that were specified
- * in the .srv file
-*/
-bool add(hive::hiveSrv::Request &req, hive::hiveSrv::Response &res){
-    res.sum = req.numA + req.numB; //pulls two numbers from request and adds them to sum field in responce
-    ROS_INFO("request: x=%ld, y=%ld", (long int)req.numA, (long int)req.numB);
-    ROS_INFO("sending back response: [%ld]", (long int)res.sum);
-    return true; //return true if service had a success
-}
-
-int main(int argc, char **argv){
-    ros::init(argc, argv, "hive_server"); //initialize the server (not really important to know what it does)
-    ros::NodeHandle n; //create a node handle
-
-    //using the node handle add a new service. The parameters are the name(important) and callback method
-    //Use this name to call the service "hive_service_add" (basically will call the add mnethod)
-    n.advertiseService("hive_service_add", add);
-    ROS_INFO("Ready to add two ints.");
-
-    ros::spin(); //spin the service as fast as you can
-    return 0;
-}
-
-
 /* TO USE SERVICE IN ANY CLASS*/
 /* FIRST: import the server (#import "hive/HiveSrv.h")
  * SECOND: declaire a service client (ros::ServiceClient client;)
@@ -47,6 +18,74 @@ int main(int argc, char **argv){
  *              }
  *
  */
+//ros includes
+#include "ros/ros.h"
+
+//operation necessary includes
+#include<vector>
+#include<string>
+#include"Robot.h"
+
+using namespace std;
+
+//this is an import for the .srv file that has to be written to create a new service
+#include "hive/hiveSrv.h"
+#include "hive/hiveAddRobot.h"
+
+//variables declaration
+vector<Robot> robotList;
+int robotCounter = 0;
+
+
+/*
+ * call back method for the service. req contains the request fields that
+ * were specified in the .srv file. res contains fields that were specified
+ * in the .srv file
+*/
+bool add(hive::hiveSrv::Request &req, hive::hiveSrv::Response &res){
+    res.sum = req.numA + req.numB; //pulls two numbers from request and adds them to sum field in responce
+    ROS_INFO("request: x=%ld, y=%ld", (long int)req.numA, (long int)req.numB);
+    ROS_INFO("sending back response: [%ld]", (long int)res.sum);
+    return true; //return true if service had a success
+}
+
+bool addRobot(hive::hiveAddRobot::Request &req, hive::hiveAddRobot::Response &res){
+    Robot r(req.robotName, robotCounter);
+    res.robotIdInHive = robotCounter;
+    robotCounter++;
+
+    res.robotIdInHive = r.getID();
+    robotList.push_back(r);
+    ROS_INFO("request: Name=%s, ID=%ld", ((std::string)req.robotName).c_str(), (long int)res.robotIdInHive);
+    return true;
+
+}
+
+int main(int argc, char **argv){
+    ros::init(argc, argv, "hive_server"); //initialize the server (not really important to know what it does)
+    ros::NodeHandle n; //create a node handle
+
+    //using the node handle add a new service. The parameters are the name(important) and callback method
+    //Use this name to call the service "hive_service_add" (basically will call the add mnethod)
+    n.advertiseService("hive_service_add", add);
+    n.advertiseService("hive_add_robot", addRobot);
+
+    ROS_INFO("Ready to add two ints.");
+
+    ros::spin(); //spin the service as fast as you can
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 

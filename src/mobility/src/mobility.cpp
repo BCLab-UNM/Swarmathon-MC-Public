@@ -1,7 +1,8 @@
 #include <ros/ros.h>
 
 //Include hive
-#include"hive/hiveSrv.h"
+#include "hive/hiveSrv.h"
+#include "hive/hiveAddRobot.h"
 
 // ROS libraries
 #include <angles/angles.h>
@@ -254,7 +255,18 @@ int main(int argc, char **argv) {
 
     //==================hive server code===========
     client = mNH.serviceClient<hive::hiveSrv>("hive_service_add");
+    ros::ServiceClient sc = mNH.serviceClient<hive::hiveAddRobot>("hive_add_robot");
 
+
+    //send robot name to hive
+    hive::hiveAddRobot srv;
+    srv.request.robotName = publishedName;
+
+    if(sc.call(srv)){
+        ROS_INFO("All good");
+    }else{
+        ROS_ERROR("Fuck");
+    }
 
 
     ros::spin();

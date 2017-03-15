@@ -1,0 +1,5 @@
+string robotName
+float64 navXPos
+float64 navYPos
+---
+int64 robotIdInHive

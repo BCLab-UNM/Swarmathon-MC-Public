@@ -380,7 +380,9 @@ GazeboSimManager::~GazeboSimManager()
 {
     stopGazeboServer();
     stopGazeboClient();
+    stopHiveServer();
     if (gazebo_server_process) gazebo_server_process->close();
+    if (hive_server_process) hive_server_process->close();
     if (gazebo_client_process) gazebo_server_process->close();
     if (command_process) command_process->close();
     delete gazebo_client_process;
@@ -414,15 +416,10 @@ QString GazeboSimManager::stopHiveServer()
 {
     if (hive_server_process == NULL) return "Hive server is not running";
 
-    QString argument = "pkill HiveService";
-    QProcess sh;
-    sh.start("sh", QStringList() << "-c" << argument);
-    sh.waitForFinished();
-    QString output = sh.readAll();
-    sh.close();
-
-    hive_server_process->close();
-    QString return_msg = "<br><font color='yellow'>" + output + "</font><br>";
+    hive_server_process->terminate();
+    hive_server_process->waitForFinished();
+    QString return_msg = "<br><font color='yellow'> Killed Hive </font><br>";
+    hive_server_process = NULL;
 
     return return_msg;
 }

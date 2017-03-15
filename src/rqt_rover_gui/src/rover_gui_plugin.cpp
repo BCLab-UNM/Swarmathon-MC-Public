@@ -1553,6 +1553,9 @@ void RoverGUIPlugin::buildSimulationButtonEventHandler()
     QProcess* sim_server_process = sim_mgr.startGazeboServer();
     connect(sim_server_process, SIGNAL(finished(int)), this, SLOT(gazeboServerFinishedEventHandler()));
 
+    //call hive server start
+    return_msg = sim_mgr.startHiveServer();
+    emit sendInfoLogMessage(return_msg);
 
     if (ui.final_radio_button->isChecked())
     {
@@ -1744,9 +1747,7 @@ void RoverGUIPlugin::buildSimulationButtonEventHandler()
    // Visualize the simulation by default call button event handler
    visualizeSimulationButtonEventHandler();
 
-   //call hive server start
-   return_msg = sim_mgr.startHiveServer();
-   emit sendInfoLogMessage(return_msg);
+
 }
 
 void RoverGUIPlugin::clearSimulationButtonEventHandler()
@@ -1759,6 +1760,9 @@ void RoverGUIPlugin::clearSimulationButtonEventHandler()
     }
 
     emit sendInfoLogMessage("Ending simulation...");
+
+
+    emit sendInfoLogMessage(sim_mgr.stopHiveServer());
 
     QProgressDialog progress_dialog;
     progress_dialog.setWindowTitle("Shutting Down Rovers");
@@ -1846,8 +1850,6 @@ void RoverGUIPlugin::clearSimulationButtonEventHandler()
 	it->second.shutdown();
       }
     control_mode_publishers.clear();
-    return_msg += sim_mgr.stopHiveServer();
-    return_msg += "<br>";
 
     return_msg += sim_mgr.stopGazeboClient();
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
