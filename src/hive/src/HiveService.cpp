@@ -29,8 +29,8 @@
 using namespace std;
 
 //this is an import for the .srv file that has to be written to create a new service
-#include "hive/hiveSrv.h"
-#include "hive/hiveAddRobot.h"
+#include "hive_srv/hiveSrv.h"
+#include "hive_srv/hiveAddRobot.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -42,14 +42,14 @@ int robotCounter = 0;
  * were specified in the .srv file. res contains fields that were specified
  * in the .srv file
 */
-bool add(hive::hiveSrv::Request &req, hive::hiveSrv::Response &res){
+bool add(hive_srv::hiveSrv::Request &req, hive_srv::hiveSrv::Response &res){
     res.sum = req.numA + req.numB; //pulls two numbers from request and adds them to sum field in responce
     ROS_INFO("request: x=%ld, y=%ld", (long int)req.numA, (long int)req.numB);
     ROS_INFO("sending back response: [%ld]", (long int)res.sum);
     return true; //return true if service had a success
 }
 
-bool addRobot(hive::hiveAddRobot::Request &req, hive::hiveAddRobot::Response &res){
+bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Response &res){
     Robot r(req.robotName, robotCounter);
     res.robotIdInHive = robotCounter;
     robotCounter++;

@@ -1,8 +1,8 @@
 #include <ros/ros.h>
 
-//Include hive
-#include "hive/hiveSrv.h"
-#include "hive/hiveAddRobot.h"
+//Include hive_srv
+#include "hive_srv//hiveSrv.h"
+#include "hive_srv//hiveAddRobot.h"
 
 // ROS libraries
 #include <angles/angles.h>
@@ -186,12 +186,6 @@ int main(int argc, char **argv) {
     // instantiate random number generator
     rng = new random_numbers::RandomNumberGenerator();
 
-    //set initial random heading
-    goalLocation.theta = rng->uniformReal(0, 2 * M_PI);
-
-    //select initial search position 50 cm from center (0,0)
-    goalLocation.x = 0.5 * cos(goalLocation.theta+M_PI);
-    goalLocation.y = 0.5 * sin(goalLocation.theta+M_PI);
 
     centerLocation.x = 0;
     centerLocation.y = 0;
@@ -254,13 +248,13 @@ int main(int argc, char **argv) {
     timerStartTime = time(0);
 
     //==================hive server code===========
-    client = mNH.serviceClient<hive::hiveSrv>("hive_service_add");
+    client = mNH.serviceClient<hive_srv::hiveSrv>("hive_service_add");
     client.waitForExistence(); //<--wait for existance maybe??
-    ros::ServiceClient sc = mNH.serviceClient<hive::hiveAddRobot>("hive_add_robot");
+    ros::ServiceClient sc = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
 
 
     //send robot name to hive
-    hive::hiveAddRobot srv;
+    hive_srv::hiveAddRobot srv;
     srv.request.robotName = publishedName;
 
     if(sc.call(srv)){
@@ -406,7 +400,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                hive::hiveSrv srv;
+                hive_srv::hiveSrv srv;
                 srv.request.numA = atoll("1");
                 srv.request.numB = atoll("2");
 

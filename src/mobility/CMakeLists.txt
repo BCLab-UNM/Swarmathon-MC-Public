@@ -8,10 +8,11 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   random_numbers
   tf
+  hive_srv
 )
 
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs std_msgs random_numbers tf
+  CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs std_msgs random_numbers tf hive_srv
 )
 
 include_directories(
@@ -27,6 +28,8 @@ add_executable(
 )
 
 add_dependencies(mobility ${catkin_EXPORTED_TARGETS})
+
+
 
 target_link_libraries(
   mobility
