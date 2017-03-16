@@ -198,8 +198,6 @@ namespace rqt_rover_gui {
     // to the main widget so keyboard manual control is handled properly
     void refocusKeyboardEventHandler();
 
-    void on_build_simulation_button_clicked();
-
   private:
 
     void checkAndRepositionRover(QString rover_name, float x, float y);

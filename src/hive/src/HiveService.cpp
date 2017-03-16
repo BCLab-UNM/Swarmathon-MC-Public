@@ -46,6 +46,7 @@ bool add(hive_srv::hiveSrv::Request &req, hive_srv::hiveSrv::Response &res){
     res.sum = req.numA + req.numB; //pulls two numbers from request and adds them to sum field in responce
     ROS_INFO("request: x=%ld, y=%ld", (long int)req.numA, (long int)req.numB);
     ROS_INFO("sending back response: [%ld]", (long int)res.sum);
+    ROS_INFO("Vector capacity: [%d]", (int)robotList.size());
     return true; //return true if service had a success
 }
 

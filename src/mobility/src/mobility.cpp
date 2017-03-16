@@ -245,23 +245,10 @@ int main(int argc, char **argv) {
     msg.data = ss.str();
     infoLogPublisher.publish(msg);
 
-    timerStartTime = time(0);
-
-    //==================hive server code===========
-    client = mNH.serviceClient<hive_srv::hiveSrv>("hive_service_add");
-    client.waitForExistence(); //<--wait for existance maybe??
-    ros::ServiceClient sc = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
+    timerStartTime = time(0); 
 
 
-    //send robot name to hive
-    hive_srv::hiveAddRobot srv;
-    srv.request.robotName = publishedName;
 
-    if(sc.call(srv)){
-        ROS_INFO("All good");
-    }else{
-        ROS_ERROR("Fuck");
-    }
 
 
     ros::spin();
@@ -294,9 +281,23 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         // time since timerStartTime was set to current time
         timerTimeElapsed = time(0) - timerStartTime;
 
+
+
         // init code goes here. (code that runs only once at start of
         // auto mode but wont work in main goes here)
         if (!init) {
+
+            ros::NodeHandle n;
+            ros::ServiceClient sc = n.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
+            //send robot name to hive
+            hive_srv::hiveAddRobot srv;
+            srv.request.robotName = publishedName;
+            if(sc.call(srv)){
+                ROS_INFO("All good");
+            }else{
+                ROS_ERROR("Fuck");
+            }
+
             if (timerTimeElapsed > startDelayInSeconds) {
                 // Set the location of the center circle location in the map
                 // frame based upon our current average location on the map.
@@ -400,6 +401,8 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
+                ros::NodeHandle n;
+                client = n.serviceClient<hive_srv::hiveSrv>("hive_service_add");
                 hive_srv::hiveSrv srv;
                 srv.request.numA = atoll("1");
                 srv.request.numB = atoll("2");

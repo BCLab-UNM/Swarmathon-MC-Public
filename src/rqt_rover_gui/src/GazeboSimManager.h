@@ -35,7 +35,7 @@ public:
 
     QString addGroundPlane( QString ground_name );
     QString removeGroundPlane( QString ground_name );
-    QString addRover(QString rover_name, float x, float y, float z, float R, float P, float Y);
+    QString addRover(QString rover_name, float x, float y, float z);
     QString removeRover(QString rover_name);
     QString startRoverNode(QString rover_name);
     QString stopRoverNode(QString rover_name);
@@ -49,9 +49,6 @@ public:
     QString addModel(QString model_name, QString unique_id, float x, float y, float z, float R, float P, float Y, float clearance);
     QString moveRover(QString rover_name, float x, float y, float z);
     QString applyForceToRover(QString rover_name, float x, float y, float z, float duration);
-    //hive service declarations
-    QString startHiveServer();
-    QString stopHiveServer();
     bool isLocationOccupied(float x, float y, float clearence);
     bool isGazeboServerRunning();
     bool isGazeboClientRunning();
@@ -65,8 +62,6 @@ private:
     QProcess* gazebo_client_process;
     QProcess* command_process;
     map<QString, QProcess*> rover_processes;
-    //hive server process
-    QProcess* hive_server_process;
 
     // Contains the positions of objects in the simulation and clearance value (the xy plane radius of the object)
     // center x, center y, clearance
