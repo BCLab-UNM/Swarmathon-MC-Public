@@ -10,6 +10,7 @@ add_service_files(
   FILES
   hiveSrv.srv
   hiveAddRobot.srv
+  calibrate.srv
 )
 
 ## Generate added messages and services with any dependencies listed here

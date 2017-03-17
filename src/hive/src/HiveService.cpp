@@ -31,6 +31,7 @@ using namespace std;
 //this is an import for the .srv file that has to be written to create a new service
 #include "hive_srv/hiveSrv.h"
 #include "hive_srv/hiveAddRobot.h"
+#include "hive_srv/calibrate.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -55,11 +56,39 @@ bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Resp
     res.robotIdInHive = robotCounter;
     robotCounter++;
 
-    res.robotIdInHive = r.getID();
+    res.robotIdInHive = r.id;
     robotList.push_back(r);
     ROS_INFO("request: Name=%s, ID=%ld", ((std::string)req.robotName).c_str(), (long int)res.robotIdInHive);
     return true;
 
+}
+
+bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Response &res){
+    string name = (string)req.robotName;
+    for(int i = 0; i<robotList.size(); i++){
+        if(name == ((Robot)robotList.at(i)).name){ //find the robot in list
+            if(req.calibrationFinished == false){
+                if(i == 0){
+                    res.startCalibration = true;
+                    ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
+                    return true;
+                } else if(((Robot)robotList.at(i-1)).calibrated == true) {
+                    ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
+                    res.startCalibration = true;
+                    return true;
+                } else {
+                    ROS_INFO("Not calibrating robot named: %s", ((std::string)req.robotName).c_str());
+                    res.startCalibration = false;
+                    return true;
+                }
+            } else {
+                Robot & r = robotList.at(i);
+                r.calibrated = true;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 int main(int argc, char **argv){
@@ -71,6 +100,8 @@ int main(int argc, char **argv){
     ros::ServiceServer s1 = n.advertiseService("hive_service_add", add);
     //have to have a ServiceServer even though never used
     ros::ServiceServer s2 = n.advertiseService("hive_add_robot", addRobot);
+    //calibration service
+    ros::ServiceServer s3 = n.advertiseService("calibration", calibration);
 
     ROS_INFO("Ready to add two ints.");
 

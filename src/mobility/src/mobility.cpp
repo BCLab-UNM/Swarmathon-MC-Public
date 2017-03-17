@@ -3,6 +3,7 @@
 //Include hive_srv
 #include "hive_srv//hiveSrv.h"
 #include "hive_srv//hiveAddRobot.h"
+#include "hive_srv/calibrate.h"
 
 // ROS libraries
 #include <angles/angles.h>
@@ -114,8 +115,10 @@ std_msgs::String msg;
 #define STATE_MACHINE_SKID_STEER 2
 #define STATE_MACHINE_PICKUP 3
 #define STATE_MACHINE_DROPOFF 4
+#define STATE_MACHINE_STARTING_POSITION 5
+#define STATE_MACHINE_CALIBRATE 6
 
-int stateMachineState = STATE_MACHINE_TRANSFORM;
+int stateMachineState = STATE_MACHINE_CALIBRATE;
 
 geometry_msgs::Twist velocity;
 char host[128];
@@ -123,7 +126,10 @@ string publishedName;
 char prev_state_machine[128];
 
 //Servers
-ros::ServiceClient client;
+ros::ServiceClient addRobotClient;
+ros::ServiceClient calibrationClient;
+//calibration variable
+bool calibrated = false;
 
 // Publishers
 ros::Publisher stateMachinePublish;
@@ -176,6 +182,8 @@ void targetDetectedReset(const ros::TimerEvent& event);
 void publishHeartBeatTimerEventHandler(const ros::TimerEvent& event);
 
 int main(int argc, char **argv) {
+
+    calibrated = false;
 
     id = counter;
     counter++;
@@ -247,8 +255,9 @@ int main(int argc, char **argv) {
 
     timerStartTime = time(0); 
 
-
-
+    //create clients
+    addRobotClient = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
+    calibrationClient = mNH.serviceClient<hive_srv::calibrate>("calibration");
 
 
     ros::spin();
@@ -262,7 +271,6 @@ int main(int argc, char **argv) {
 // This block passes the goal location to the proportional-integral-derivative
 // controllers in the abridge package.
 void mobilityStateMachine(const ros::TimerEvent&) {
-
 
 
 
@@ -288,11 +296,10 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         if (!init) {
 
             ros::NodeHandle n;
-            ros::ServiceClient sc = n.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
             //send robot name to hive
             hive_srv::hiveAddRobot srv;
             srv.request.robotName = publishedName;
-            if(sc.call(srv)){
+            if(addRobotClient.call(srv)){
                 ROS_INFO("All good");
             }else{
                 ROS_ERROR("Fuck");
@@ -402,7 +409,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
                 ros::NodeHandle n;
-                client = n.serviceClient<hive_srv::hiveSrv>("hive_service_add");
+                ros::ServiceClient client = n.serviceClient<hive_srv::hiveSrv>("hive_service_add");
                 hive_srv::hiveSrv srv;
                 srv.request.numA = atoll("1");
                 srv.request.numB = atoll("2");
@@ -534,6 +541,31 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         case STATE_MACHINE_DROPOFF: {
             stateMachineMsg.data = "DROPOFF";
             break;
+        }
+        //each robot checks if it is its turn to calibrate
+        case STATE_MACHINE_CALIBRATE: {
+            hive_srv::calibrate srv;
+            srv.request.robotName = publishedName;
+            srv.request.calibrationFinished = calibrated;
+            if(calibrationClient.call(srv)){
+                ROS_INFO("Calibrate: %s", srv.response.startCalibration ? "true" : "false");
+                if(((bool)srv.response.startCalibration) == true){
+                    //calibration code goes here
+                    calibrated = true;
+                } else if(((bool)srv.response.startCalibration) == false && calibrated == true){
+                    //we have calibrated already move on
+                    stateMachineState = STATE_MACHINE_STARTING_POSITION;
+                } else {
+                    ROS_INFO("Waiting to be calibrated: %s", publishedName.c_str());
+                }
+            } else {
+                ROS_INFO("Failed to call calibration service");
+                return;
+            }
+        }
+        //if calibration is done, move to starting positioin
+        case STATE_MACHINE_STARTING_POSITION: {
+            ROS_INFO("Waiting for next step: %s", publishedName.c_str());
         }
 
         default: {

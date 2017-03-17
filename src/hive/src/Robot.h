@@ -4,13 +4,16 @@
 #include<string>
 
 class Robot{
+
+
+public: //bad practive to make everyhting publick but works faster
     std::string name;
     int id;
+    bool calibrated;
 
-public:
     Robot(std::string name, int id);
-    int getID(){return id;}
-    std::string getName(){return name;}
+
+
 };
 
 #endif
