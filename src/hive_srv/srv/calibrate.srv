@@ -1,5 +1,10 @@
 string robotName
 bool calibratedOnCenter
 bool calibratedOnStart
+float32 currLocationX
+float32 currLocationY
 ---
 bool calibrate
+float32 posAdjustX
+float32 posAdjustY
+bool positionAdjusted

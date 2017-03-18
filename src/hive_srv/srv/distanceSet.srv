@@ -1,0 +1,6 @@
+string robotName
+float64 currentX
+float64 currentY
+---
+float64 sizeOfField
+

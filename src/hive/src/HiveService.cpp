@@ -38,6 +38,11 @@ using namespace std;
 vector<Robot> robotList;
 int robotCounter = 0;
 
+//position adjusts
+bool positionAdjusted = false;
+float posAdjustX = -10;
+float posAdjustY = -10;
+
 
 /*
  * call back method for the service. req contains the request fields that
@@ -59,6 +64,7 @@ bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Resp
     res.robotIdInHive = r.id;
 
     robotList.push_back(r);
+    ROS_INFO("Heading for robot=%s, heading=%f", ((std::string)req.robotName).c_str(), (double)req.currTheta);
     ROS_INFO("request: Name=%s, ID=%ld", ((std::string)req.robotName).c_str(), (long int)res.robotIdInHive);
     return true;
 
@@ -68,14 +74,29 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
     string name = (string)req.robotName;
     for(int i = 0; i<robotList.size(); i++){
         if(name == ((Robot)robotList.at(i)).name){ //find the robot in list
+            //check if center was calibrated
             if(req.calibratedOnStart == false){ //if calibration is not finished
                 if(i == 0){
+                    if(req.calibratedOnCenter){ //if the robot is being calibrated check if center is calibrated
+                        if(!positionAdjusted){ //if adjusts were not set
+                            positionAdjusted = true;
+                            posAdjustX = fabs(req.currLocationX);
+                            posAdjustY = fabs(req.currLocationY);
+                            ROS_INFO("Setting adjustments: X:%f, Y:%f" , posAdjustX, posAdjustY );
+                        }
+                    }
+                    res.posAdjustX = posAdjustX;
+                    res.posAdjustY = posAdjustY;
+                    res.positionAdjusted = positionAdjusted;
                     res.calibrate = true;
                     ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
                     return true;
                 } else if(((Robot)robotList.at(i-1)).calibrated == true) {
                     ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
                     res.calibrate = true;
+                    res.posAdjustX = posAdjustX;
+                    res.posAdjustY = posAdjustY;
+                    res.positionAdjusted = positionAdjusted;
                     return true;
                 } else {
                     //ROS_INFO("Not calibrating robot named: %s", ((std::string)req.robotName).c_str());
