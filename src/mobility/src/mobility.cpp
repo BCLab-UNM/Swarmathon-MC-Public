@@ -51,6 +51,8 @@ void closeFingers();// Close fingers to 0 degrees
 void raiseWrist();  // Return wrist back to 0 degrees
 void lowerWrist();  // Lower wrist to 50 degrees
 void mapAverage();  // constantly averages last 100 positions from map
+float getNewGoalX(float goalX);
+float getNewGoalY(float goalY);
 
 // Numeric Variables for rover positioning
 geometry_msgs::Pose2D currentLocation;
@@ -61,6 +63,9 @@ geometry_msgs::Pose2D goalLocation;
 geometry_msgs::Pose2D centerLocation;
 geometry_msgs::Pose2D centerLocationMap;
 geometry_msgs::Pose2D centerLocationOdom;
+
+geometry_msgs::Pose2D newCenterLocation;
+geometry_msgs::Pose2D startLocation;
 
 static int counter;
 int id;
@@ -129,7 +134,11 @@ char prev_state_machine[128];
 ros::ServiceClient addRobotClient;
 ros::ServiceClient calibrationClient;
 //calibration variable
-bool calibrated = false;
+bool calibratedOnCenter = false;
+bool calibratedOnStart = false;
+//position adjusting values. Used to create a new center
+float posAdjustX;
+float posAdjustY;
 
 // Publishers
 ros::Publisher stateMachinePublish;
@@ -183,7 +192,8 @@ void publishHeartBeatTimerEventHandler(const ros::TimerEvent& event);
 
 int main(int argc, char **argv) {
 
-    calibrated = false;
+    calibratedOnStart = false;
+    calibratedOnCenter = false;
 
     id = counter;
     counter++;
@@ -408,19 +418,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                ros::NodeHandle n;
-                ros::ServiceClient client = n.serviceClient<hive_srv::hiveSrv>("hive_service_add");
-                hive_srv::hiveSrv srv;
-                srv.request.numA = atoll("1");
-                srv.request.numB = atoll("2");
 
-                if(client.call(srv)){
-                    ROS_INFO("Sum: %ld", srv.response.sum);
-                } else {
-                    ROS_INFO("Failed to call service add_two_ints");
-                    return;
-                }
-                ROS_INFO("Sum: %ld", srv.response.sum);
                 goalLocation = searchController.search(id, centerLocationOdom, currentLocation);
             }
 
@@ -470,8 +468,35 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             else {
                 // stop
                 sendDriveCommand(0.0, 0.0);
-                avoidingObstacle = false;
 
+                if(!calibratedOnCenter){
+                    if(fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x))) > M_PI_2){
+                        ROS_INFO("Calibrated Center");
+                        //if center has been reached
+                        calibratedOnCenter = true;
+                        posAdjustX = currentLocation.x;
+                        posAdjustY = currentLocation.y;
+                        newCenterLocation = currentLocation;
+                    }
+                    stateMachineState = STATE_MACHINE_CALIBRATE;
+                    break;
+                }
+
+                if(calibratedOnCenter && !calibratedOnStart){
+                    /*if(fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(getNewGoalY(startLocation.y) - currentLocation.y, getNewGoalX(startLocation.x) - currentLocation.x))) > M_PI_2){
+                        //if center has been reached
+                        ROS_INFO("calibrated start");
+                        calibratedOnStart = true;
+                        posAdjustX = currentLocation.x;
+                        posAdjustY = currentLocation.y;
+                        startLocation = currentLocation;
+                    }*/
+                    calibratedOnStart = true;
+                    stateMachineState = STATE_MACHINE_CALIBRATE;
+                    break;
+                }
+
+                avoidingObstacle = false;
                 // move back to transform step
                 stateMachineState = STATE_MACHINE_TRANSFORM;
             }
@@ -546,22 +571,57 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         case STATE_MACHINE_CALIBRATE: {
             hive_srv::calibrate srv;
             srv.request.robotName = publishedName;
-            srv.request.calibrationFinished = calibrated;
+            srv.request.calibratedOnCenter = calibratedOnCenter;
+            srv.request.calibratedOnStart = calibratedOnStart;
             if(calibrationClient.call(srv)){
-                ROS_INFO("Calibrate: %s", srv.response.startCalibration ? "true" : "false");
-                if(((bool)srv.response.startCalibration) == true){
-                    //calibration code goes here
-                    calibrated = true;
-                } else if(((bool)srv.response.startCalibration) == false && calibrated == true){
-                    //we have calibrated already move on
-                    stateMachineState = STATE_MACHINE_STARTING_POSITION;
+                if(srv.response.calibrate == true){
+                    ROS_INFO("Calibrate: %s", srv.response.calibrate ? "true" : "false");
+                    if(!calibratedOnCenter){
+                        if(!avoidingObstacle){ //if runing first time with no obsticles
+                            goalLocation.theta = currentLocation.theta;
+                            goalLocation.x = currentLocation.x + (1.15 * cos(goalLocation.theta));
+                            goalLocation.y = currentLocation.y + (1.15 * sin(goalLocation.theta));
+                            newCenterLocation = goalLocation; //set the new center location
+                            stateMachineState = STATE_MACHINE_ROTATE;
+                            ROS_INFO("Going to center: %s", publishedName.c_str() ? "true" : "false");
+                        } else { //if got an obsticle and recentering
+                            goalLocation.x = newCenterLocation.x;
+                            goalLocation.y = newCenterLocation.y;
+                            goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
+                            ROS_INFO("Going to center after interuption: %s", publishedName.c_str() ? "true" : "false");
+                            stateMachineState = STATE_MACHINE_ROTATE;
+                        }
+                        break;
+                    } else if (calibratedOnCenter && !calibratedOnStart){ //if center is calibrated go to start
+                        if(!avoidingObstacle){
+                            goalLocation.theta = 0; //heading
+                            //adjust desired heading
+                            goalLocation.x = currentLocation.x + ((3+posAdjustX) * cos(goalLocation.theta));
+                            goalLocation.y = currentLocation.y + ((3+posAdjustY) * sin(goalLocation.theta));
+                            stateMachineState = STATE_MACHINE_ROTATE;
+                            startLocation = goalLocation;
+                            ROS_INFO("Going to starting location: %s", publishedName.c_str() ? "true" : "false");
+                        } else {
+                            goalLocation.x = startLocation.x;
+                            goalLocation.y = startLocation.y;
+                            goalLocation.theta = atan2((startLocation.y + posAdjustY) - currentLocation.y, (startLocation.x + posAdjustX) - currentLocation.x);
+                            stateMachineState = STATE_MACHINE_ROTATE;
+                            ROS_INFO("Going to start position after interuption: %s", publishedName.c_str() ? "true" : "false");
+                        }
+                    } else {
+                        stateMachineState = STATE_MACHINE_TRANSFORM;
+                        break;
+                    }
                 } else {
-                    ROS_INFO("Waiting to be calibrated: %s", publishedName.c_str());
+                    ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
+
                 }
+
             } else {
                 ROS_INFO("Failed to call calibration service");
                 return;
             }
+            break;
         }
         //if calibration is done, move to starting positioin
         case STATE_MACHINE_STARTING_POSITION: {
@@ -585,6 +645,15 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         stateMachinePublish.publish(stateMachineMsg);
         sprintf(prev_state_machine, "%s", stateMachineMsg.data.c_str());
     }
+}
+
+//calculate adjusted x coord
+float getNewGoalX(float goalX){
+    return goalX + newCenterLocation.x;
+}
+//calculate adjusted y coord
+float getNewGoalY(float goalY){
+    return goalY + newCenterLocation.y;
 }
 
 void sendDriveCommand(double linearVel, double angularError)

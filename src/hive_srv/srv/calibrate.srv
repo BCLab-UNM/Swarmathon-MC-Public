@@ -1,4 +1,5 @@
 string robotName
-bool calibrationFinished
+bool calibratedOnCenter
+bool calibratedOnStart
 ---
-bool startCalibration
+bool calibrate

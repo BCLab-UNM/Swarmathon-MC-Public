@@ -67,18 +67,18 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
     string name = (string)req.robotName;
     for(int i = 0; i<robotList.size(); i++){
         if(name == ((Robot)robotList.at(i)).name){ //find the robot in list
-            if(req.calibrationFinished == false){
+            if(req.calibratedOnStart == false){ //if calibration is not finished
                 if(i == 0){
-                    res.startCalibration = true;
+                    res.calibrate = true;
                     ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
                     return true;
                 } else if(((Robot)robotList.at(i-1)).calibrated == true) {
                     ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
-                    res.startCalibration = true;
+                    res.calibrate = true;
                     return true;
                 } else {
                     ROS_INFO("Not calibrating robot named: %s", ((std::string)req.robotName).c_str());
-                    res.startCalibration = false;
+                    res.calibrate = false;
                     return true;
                 }
             } else {
