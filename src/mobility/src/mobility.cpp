@@ -285,7 +285,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.4;
+    float rotateOnlyAngleTolerance = 0.2;
     int returnToSearchDelay = 5;
 
     // calls the averaging function, also responsible for
@@ -314,8 +314,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                 // initialization has run
                 init = true;
-                mapAverage();
-                ros::NodeHandle n;
                 //send robot name to hive
                 hive_srv::hiveAddRobot srv;
                 srv.request.robotName = publishedName;
@@ -488,8 +486,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         //if center has been reached
                         ROS_INFO("calibrated start");
                         calibratedOnStart = true;
-                        posAdjustX = currentLocation.x;
-                        posAdjustY = currentLocation.y;
                         startLocation = currentLocation;
                     }
                     stateMachineState = STATE_MACHINE_CALIBRATE;
@@ -615,7 +611,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 } else if (calibratedOnCenter && calibratedOnStart && srv.response.calibrate == false) {
                     //we have calibrated go to transform
                     ROS_INFO("Back to transform");
-                    stateMachineState = STATE_MACHINE_TRANSFORM;
+                    //stateMachineState = STATE_MACHINE_TRANSFORM;
                     break;
                 } else {
                     //dont start calibrating robot yet
