@@ -305,16 +305,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         // auto mode but wont work in main goes here)
         if (!init) {
 
-            ros::NodeHandle n;
-            //send robot name to hive
-            hive_srv::hiveAddRobot srv;
-            srv.request.robotName = publishedName;
-            if(addRobotClient.call(srv)){
-                ROS_INFO("All good");
-            }else{
-                ROS_ERROR("Fuck");
-            }
-
             if (timerTimeElapsed > startDelayInSeconds) {
                 // Set the location of the center circle location in the map
                 // frame based upon our current average location on the map.
@@ -324,6 +314,18 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                 // initialization has run
                 init = true;
+                mapAverage();
+                ros::NodeHandle n;
+                //send robot name to hive
+                hive_srv::hiveAddRobot srv;
+                srv.request.robotName = publishedName;
+                srv.request.currTheta = currentLocation.theta;
+                if(addRobotClient.call(srv)){
+                    ROS_INFO("All good");
+                }else{
+                    ROS_ERROR("Fuck");
+                }
+
             } else {
                 return;
             }
@@ -418,7 +420,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-
                 goalLocation = searchController.search(id, centerLocationOdom, currentLocation);
             }
 
@@ -483,19 +484,19 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 }
 
                 if(calibratedOnCenter && !calibratedOnStart){
-                    /*if(fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(getNewGoalY(startLocation.y) - currentLocation.y, getNewGoalX(startLocation.x) - currentLocation.x))) > M_PI_2){
+                    if(fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(getNewGoalY(startLocation.y) - currentLocation.y, getNewGoalX(startLocation.x) - currentLocation.x))) > M_PI_2){
                         //if center has been reached
                         ROS_INFO("calibrated start");
                         calibratedOnStart = true;
                         posAdjustX = currentLocation.x;
                         posAdjustY = currentLocation.y;
                         startLocation = currentLocation;
-                    }*/
-                    calibratedOnStart = true;
+                    }
                     stateMachineState = STATE_MACHINE_CALIBRATE;
                     break;
                 }
 
+                ROS_INFO("Back to transform");
                 avoidingObstacle = false;
                 // move back to transform step
                 stateMachineState = STATE_MACHINE_TRANSFORM;
@@ -569,6 +570,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         }
         //each robot checks if it is its turn to calibrate
         case STATE_MACHINE_CALIBRATE: {
+            searchVelocity = 0.7;
             hive_srv::calibrate srv;
             srv.request.robotName = publishedName;
             srv.request.calibratedOnCenter = calibratedOnCenter;
@@ -594,27 +596,30 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         break;
                     } else if (calibratedOnCenter && !calibratedOnStart){ //if center is calibrated go to start
                         if(!avoidingObstacle){
-                            goalLocation.theta = 0; //heading
+                            goalLocation.theta = currentLocation.theta + 3.14; //heading
                             //adjust desired heading
-                            goalLocation.x = currentLocation.x + ((3+posAdjustX) * cos(goalLocation.theta));
-                            goalLocation.y = currentLocation.y + ((3+posAdjustY) * sin(goalLocation.theta));
+                            goalLocation.x = currentLocation.x + (3 * cos(goalLocation.theta));
+                            goalLocation.y = currentLocation.y + (3 * sin(goalLocation.theta));
                             stateMachineState = STATE_MACHINE_ROTATE;
                             startLocation = goalLocation;
                             ROS_INFO("Going to starting location: %s", publishedName.c_str() ? "true" : "false");
                         } else {
+                            avoidingObstacle = false;
                             goalLocation.x = startLocation.x;
                             goalLocation.y = startLocation.y;
-                            goalLocation.theta = atan2((startLocation.y + posAdjustY) - currentLocation.y, (startLocation.x + posAdjustX) - currentLocation.x);
+                            goalLocation.theta = atan2(getNewGoalY(startLocation.x) - currentLocation.y, getNewGoalX(startLocation.x) - currentLocation.x);
                             stateMachineState = STATE_MACHINE_ROTATE;
                             ROS_INFO("Going to start position after interuption: %s", publishedName.c_str() ? "true" : "false");
                         }
-                    } else {
-                        stateMachineState = STATE_MACHINE_TRANSFORM;
-                        break;
                     }
+                } else if (calibratedOnCenter && calibratedOnStart && srv.response.calibrate == false) {
+                    //we have calibrated go to transform
+                    ROS_INFO("Back to transform");
+                    stateMachineState = STATE_MACHINE_TRANSFORM;
+                    break;
                 } else {
-                    ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
-
+                    //dont start calibrating robot yet
+                    //ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
                 }
 
             } else {
@@ -768,33 +773,52 @@ void modeHandler(const std_msgs::UInt8::ConstPtr& message) {
 }
 
 void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
-    if ((!targetDetected || targetCollected) && (message->data > 0)) {
-        // obstacle on right side
-        if (message->data == 1) {
-            // select new heading 0.2 radians to the left
-            goalLocation.theta = currentLocation.theta + 0.6;
+    if(calibratedOnCenter){
+        if ((!targetDetected || targetCollected) && (message->data > 0)) {
+            if(calibratedOnCenter && calibratedOnStart){
+                // obstacle on right side
+                if (message->data == 1) {
+                    // select new heading 0.2 radians to the left
+                    goalLocation.theta = currentLocation.theta + 0.6;
+                }
+
+                // obstacle in front or on left side
+                else if (message->data == 2) {
+                    // select new heading 0.2 radians to the right
+                    goalLocation.theta = currentLocation.theta + 0.6;
+                }
+
+                // continues an interrupted search
+                goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+            } else if (calibratedOnCenter && !calibratedOnStart){
+                // obstacle on right side
+                if (message->data == 1) {
+                    // select new heading 0.2 radians to the left
+                    goalLocation.theta = currentLocation.theta + 3.14/4;
+                }
+
+                // obstacle in front or on left side
+                else if (message->data == 2) {
+                    // select new heading 0.2 radians to the right
+                    goalLocation.theta = currentLocation.theta + 3.14/4;
+                }
+
+                goalLocation.x = currentLocation.x + (1.5 * cos(goalLocation.theta));
+                goalLocation.y = currentLocation.y + (1.5 * sin(goalLocation.theta));
+            }
+
+            // switch to transform state to trigger collision avoidance
+            stateMachineState = STATE_MACHINE_ROTATE;
+
+            avoidingObstacle = true;
         }
 
-        // obstacle in front or on left side
-        else if (message->data == 2) {
-            // select new heading 0.2 radians to the right
-            goalLocation.theta = currentLocation.theta + 0.6;
+        // the front ultrasond is blocked very closely. 0.14m currently
+        if (message->data == 4) {
+            blockBlock = true;
+        } else {
+            blockBlock = false;
         }
-
-        // continues an interrupted search
-        goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-
-        // switch to transform state to trigger collision avoidance
-        stateMachineState = STATE_MACHINE_ROTATE;
-
-        avoidingObstacle = true;
-    }
-
-    // the front ultrasond is blocked very closely. 0.14m currently
-    if (message->data == 4) {
-        blockBlock = true;
-    } else {
-        blockBlock = false;
     }
 }
 

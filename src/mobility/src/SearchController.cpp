@@ -6,7 +6,7 @@ SearchController::SearchController() {
   rng = new random_numbers::RandomNumberGenerator();
   this->first = true;
   this->numOfItr = 0;
-  this->ratio = 0.5;
+  this->ratio = 2;
 
 }
 
@@ -39,7 +39,7 @@ geometry_msgs::Pose2D SearchController::search(int counter, geometry_msgs::Pose2
         this->numOfItr = 0;
     }
 
-    if(this->ratio >= 2){
+    /*if(this->ratio >= 2){
         if(!stop){
             //code to go back to center
             //set angle to center as goal heading
@@ -51,12 +51,12 @@ geometry_msgs::Pose2D SearchController::search(int counter, geometry_msgs::Pose2
             //spinWasTrue = true; only turn on for random walk to center
             stop = true;
         }
-    } else {
+    } else {*/
         //select new position 50 cm from current location
         goalLocation.x = currentLocation.x + (ratio * cos(goalLocation.theta));
         goalLocation.y = currentLocation.y + (ratio* sin(goalLocation.theta));
         this->numOfItr++;
-    }
+
 
     return goalLocation;
 }

@@ -1,5 +1,4 @@
 string robotName
-float64 navXPos
-float64 navYPos
+float64 currTheta
 ---
 int64 robotIdInHive

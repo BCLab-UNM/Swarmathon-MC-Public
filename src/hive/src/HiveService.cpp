@@ -24,6 +24,7 @@
 //operation necessary includes
 #include<vector>
 #include<string>
+#include <angles/angles.h>
 #include"Robot.h"
 
 using namespace std;
@@ -55,8 +56,8 @@ bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Resp
     Robot r(req.robotName, robotCounter);
     res.robotIdInHive = robotCounter;
     robotCounter++;
-
     res.robotIdInHive = r.id;
+
     robotList.push_back(r);
     ROS_INFO("request: Name=%s, ID=%ld", ((std::string)req.robotName).c_str(), (long int)res.robotIdInHive);
     return true;
@@ -77,7 +78,7 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
                     res.calibrate = true;
                     return true;
                 } else {
-                    ROS_INFO("Not calibrating robot named: %s", ((std::string)req.robotName).c_str());
+                    //ROS_INFO("Not calibrating robot named: %s", ((std::string)req.robotName).c_str());
                     res.calibrate = false;
                     return true;
                 }
