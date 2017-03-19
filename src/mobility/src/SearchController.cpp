@@ -6,56 +6,72 @@ SearchController::SearchController() {
   rng = new random_numbers::RandomNumberGenerator();
   this->first = true;
   this->numOfItr = 0;
-  this->ratio = 2;
+  this->ratio = 0;
+  this->stop = false;
 
 }
 
 /**
  * This code implements a basic random walk search.
  */
-geometry_msgs::Pose2D SearchController::search(int counter, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation) {
+geometry_msgs::Pose2D SearchController::search(float startSearchWidth, float endSearchWidth, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation) {
   geometry_msgs::Pose2D goalLocation;
 
-   ROS_INFO("heySearch");
-
-    if(this->first)
-    {
-      //currentLocation.theta = 0;
-      goalLocation.theta = (3.14/2)*counter;
-      this->first = false;
-      this->stop = false;
-    }
-    else
-    {
-        //select new heading from Gaussian distribution around current heading
-        goalLocation.theta = currentLocation.theta + (3.14/2);//rng->gaussianussian(currentLocation.theta, 0.25);
-        /*if(currentLocation.theta >= (3.14/2)*4){
-            goalLocation.theta = 0;
-        }*/
-    }
-
-    if(this->numOfItr == 2){
-        this->ratio += 0.5;
-        this->numOfItr = 0;
-    }
-
-    /*if(this->ratio >= 2){
-        if(!stop){
-            //code to go back to center
-            //set angle to center as goal heading
-            goalLocation.theta = atan2(0 - currentLocation.y, 0 - currentLocation.x);
-
-            //set center as goal position
-            goalLocation.x = 0;
-            goalLocation.y = 0;
-            //spinWasTrue = true; only turn on for random walk to center
-            stop = true;
+    ROS_INFO("heySearch");
+    if(!stop){
+        if(this->first)
+        {
+          //currentLocation.theta = 0;
+          goalLocation.theta = currentLocation.theta + (M_PI/2);
+          ratio = startSearchWidth*2;
+          //this->first = false;
+          this->stop = false;
         }
-    } else {*/
-        //select new position 50 cm from current location
-        goalLocation.x = currentLocation.x + (ratio * cos(goalLocation.theta));
-        goalLocation.y = currentLocation.y + (ratio* sin(goalLocation.theta));
-        this->numOfItr++;
+        else
+        {
+            //select new heading from Gaussian distribution around current heading
+            goalLocation.theta = currentLocation.theta + (M_PI/2);//rng->gaussianussian(currentLocation.theta, 0.25);
+            /*if(currentLocation.theta >= (3.14/2)*4){
+                goalLocation.theta = 0;
+            }*/
+        }
+
+        if(this->numOfItr == 2){
+            this->ratio -= 0.5;
+            this->numOfItr = 0;
+        }
+
+        /*if(this->ratio >= 2){
+            if(!stop){
+                //code to go back to center
+                //set angle to center as goal heading
+                goalLocation.theta = atan2(0 - currentLocation.y, 0 - currentLocation.x);
+
+                //set center as goal position
+                goalLocation.x = 0;
+                goalLocation.y = 0;
+                //spinWasTrue = true; only turn on for random walk to center
+                stop = true;
+            }
+        } else {*/
+        if(ratio <= endSearchWidth){
+            stop = true;
+            return currentLocation;
+        } else {
+            if(first){
+                this->first = false;
+                //select new position 50 cm from current location
+                goalLocation.x = currentLocation.x + (ratio/2 * cos(goalLocation.theta));
+                goalLocation.y = currentLocation.y + (ratio/2 * sin(goalLocation.theta));
+            } else {
+                goalLocation.x = currentLocation.x + (ratio * cos(goalLocation.theta));
+                goalLocation.y = currentLocation.y + (ratio * sin(goalLocation.theta));
+            }
+
+            this->numOfItr++;
+        }
+    }
+
 
 
     return goalLocation;

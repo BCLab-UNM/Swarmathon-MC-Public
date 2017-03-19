@@ -17,7 +17,7 @@ class SearchController {
     SearchController();
 
     // performs search pattern
-    geometry_msgs::Pose2D search(int counter, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation);
+    geometry_msgs::Pose2D search(float startSearchWidth, float endSearchWidth, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation);
 
     // continues search pattern after interruption
     geometry_msgs::Pose2D continueInterruptedSearch(geometry_msgs::Pose2D currentLocation, geometry_msgs::Pose2D oldGoalLocation);

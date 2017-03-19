@@ -425,7 +425,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                goalLocation = searchController.search(id, centerLocationOdom, currentLocation);
+                goalLocation = searchController.search(startSearchWidth, endSearchWidth, newCenterLocation, currentLocation);
             }
 
             //Purposefully fall through to next case without breaking
@@ -656,7 +656,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 } else if (calibratedOnCenter && calibratedOnStart && srv.response.calibrate == false) {
                     //we have calibrated go to transform
                     //ROS_INFO("Back to transform");
-                    //stateMachineState = STATE_MACHINE_TRANSFORM;
+                    stateMachineState = STATE_MACHINE_TRANSFORM;
                     break;
                 } else {
                     //dont start calibrating robot yet
