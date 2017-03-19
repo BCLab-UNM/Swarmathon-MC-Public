@@ -33,6 +33,7 @@ using namespace std;
 #include "hive_srv/hiveSrv.h"
 #include "hive_srv/hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
+#include "hive_srv/setArena.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -62,6 +63,7 @@ bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Resp
     res.robotIdInHive = robotCounter;
     robotCounter++;
     res.robotIdInHive = r.id;
+
 
     robotList.push_back(r);
     ROS_INFO("Heading for robot=%s, heading=%f", ((std::string)req.robotName).c_str(), (double)req.currTheta);
@@ -113,6 +115,44 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
     return false;
 }
 
+bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &res){
+    string name = req.robotName;
+    int id = 0;
+    float arenaSize = 15;
+    for(int i = 0; i<robotList.size(); i++){
+        if(name == ((Robot)robotList.at(i)).name){ //find the robot in list
+            Robot r = robotList[i];
+            id = i;
+            //ROS_INFO("Robot ID found in serArena: %d, in robot: %d", i, r.id);
+        }
+    }
+
+    //find out arena size
+    if(robotList.size() <= 4){ //if arena has 3 robots
+        arenaSize = 15;
+    } else if(robotList.size() == 6){ //if arena has 6 robots
+        arenaSize = 22;
+    }
+
+    //find half the arena
+    arenaSize = arenaSize - 3; //subtract two meters because nothing there
+    if(robotList.size() <= 4){
+        //split arena in 3
+        float split = (arenaSize/2)/robotList.size(); // find out how to split
+        float startSearchWidth = split * (robotList.size() - id);
+        float endSearchWidth = split * (robotList.size() - (id+1));
+        res.searchStartWidth = startSearchWidth;
+        res.searchEndWidth = endSearchWidth;
+        int robots = robotList.size();
+        ROS_INFO("Start %f:, End: %f, ID: %d, RObots: %d ", startSearchWidth, endSearchWidth, id, robots);
+    } else {
+
+    }
+
+    return true;
+}
+
+
 int main(int argc, char **argv){
     ros::init(argc, argv, "hive_server"); //initialize the server (not really important to know what it does)
     ros::NodeHandle n; //create a node handle
@@ -124,6 +164,8 @@ int main(int argc, char **argv){
     ros::ServiceServer s2 = n.advertiseService("hive_add_robot", addRobot);
     //calibration service
     ros::ServiceServer s3 = n.advertiseService("calibration", calibration);
+
+    ros::ServiceServer s4 = n.advertiseService("set_arena", setArena);
 
     ROS_INFO("Ready to add two ints.");
 

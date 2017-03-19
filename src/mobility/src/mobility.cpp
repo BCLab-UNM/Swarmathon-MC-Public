@@ -4,6 +4,7 @@
 #include "hive_srv//hiveSrv.h"
 #include "hive_srv//hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
+#include "hive_srv/setArena.h"
 
 // ROS libraries
 #include <angles/angles.h>
@@ -27,6 +28,7 @@
 #include "PickUpController.h"
 #include "DropOffController.h"
 #include "SearchController.h"
+
 
 // To handle shutdown signals so the node quits
 // properly in response to "rosnode kill"
@@ -133,12 +135,16 @@ char prev_state_machine[128];
 //Servers
 ros::ServiceClient addRobotClient;
 ros::ServiceClient calibrationClient;
+ros::ServiceClient setArenaClient;
 //calibration variable
 bool calibratedOnCenter = false;
 bool calibratedOnStart = false;
 //position adjusting values. Used to create a new center
 float posAdjustX;
 float posAdjustY;
+//used to set initial search position and the end search
+float startSearchWidth = 0;
+float endSearchWidth = 0;
 
 // Publishers
 ros::Publisher stateMachinePublish;
@@ -268,6 +274,7 @@ int main(int argc, char **argv) {
     //create clients
     addRobotClient = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
     calibrationClient = mNH.serviceClient<hive_srv::calibrate>("calibration");
+    setArenaClient = mNH.serviceClient<hive_srv::setArena>("set_arena");
 
 
     ros::spin();
@@ -619,11 +626,21 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                             break;
                         }
                     } else if (calibratedOnCenter && !calibratedOnStart){ //if center is calibrated go to start
+                        hive_srv::setArena srvSearch;
+                        srvSearch.request.robotName = publishedName;
+                        if(setArenaClient.call(srvSearch)){ //request a starting position
+                            startSearchWidth = srvSearch.response.searchStartWidth;
+                            endSearchWidth = srvSearch.response.searchEndWidth;
+                            ROS_INFO("Start %f:, End: %f ", startSearchWidth, endSearchWidth);
+                        } else {
+                            ROS_INFO("Could not call set arena");
+                        }
+                        searchVelocity = 1;
                         if(!avoidingObstacle){
                             goalLocation.theta = currentLocation.theta + 3.14; //heading
                             //adjust desired heading
-                            goalLocation.x = currentLocation.x + (3 * cos(goalLocation.theta));
-                            goalLocation.y = currentLocation.y + (3 * sin(goalLocation.theta));
+                            goalLocation.x = currentLocation.x + (startSearchWidth * cos(goalLocation.theta));
+                            goalLocation.y = currentLocation.y + (startSearchWidth * sin(goalLocation.theta));
                             stateMachineState = STATE_MACHINE_ROTATE;
                             startLocation = goalLocation;
                             ROS_INFO("Going to starting location: %s", publishedName.c_str() ? "true" : "false");
@@ -638,7 +655,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
                 } else if (calibratedOnCenter && calibratedOnStart && srv.response.calibrate == false) {
                     //we have calibrated go to transform
-                    ROS_INFO("Back to transform");
+                    //ROS_INFO("Back to transform");
                     //stateMachineState = STATE_MACHINE_TRANSFORM;
                     break;
                 } else {
@@ -739,27 +756,33 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
         // if we see the center and we dont have a target collected
         if (centerSeen && !targetCollected) {
+            if (!calibratedOnCenter){
+                //drive 0.7 meter forward
+            } else if (calibratedOnCenter && !calibratedOnStart){
 
-            /*float centeringTurn = 0.15; //radians
-            stateMachineState = STATE_MACHINE_TRANSFORM;
-
-            // this code keeps the robot from driving over
-            // the center when searching for blocks
-            if (right) {
-                // turn away from the center to the left if just driving
-                // around/searching.
-                goalLocation.theta += centeringTurn;
             } else {
-                // turn away from the center to the right if just driving
-                // around/searching.
-                goalLocation.theta -= centeringTurn;
+                /*float centeringTurn = 0.15; //radians
+                stateMachineState = STATE_MACHINE_TRANSFORM;
+
+                // this code keeps the robot from driving over
+                // the center when searching for blocks
+                if (right) {
+                    // turn away from the center to the left if just driving
+                    // around/searching.
+                    goalLocation.theta += centeringTurn;
+                } else {
+                    // turn away from the center to the right if just driving
+                    // around/searching.
+                    goalLocation.theta -= centeringTurn;
+                }
+
+                // continues an interrupted search
+                goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+
+                targetDetected = false;
+                pickUpController.reset();*/
             }
 
-            // continues an interrupted search
-            goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-
-            targetDetected = false;
-            pickUpController.reset();*/
 
             return;
         }

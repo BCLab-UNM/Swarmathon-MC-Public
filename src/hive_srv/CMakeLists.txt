@@ -11,6 +11,7 @@ add_service_files(
   hiveSrv.srv
   hiveAddRobot.srv
   calibrate.srv
+  setArena.srv
 )
 
 ## Generate added messages and services with any dependencies listed here
