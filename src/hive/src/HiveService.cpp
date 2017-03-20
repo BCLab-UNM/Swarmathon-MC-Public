@@ -76,20 +76,8 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
     string name = (string)req.robotName;
     for(int i = 0; i<robotList.size(); i++){
         if(name == ((Robot)robotList.at(i)).name){ //find the robot in list
-            //check if center was calibrated
             if(req.calibratedOnStart == false){ //if calibration is not finished
                 if(i == 0){
-                    if(req.calibratedOnCenter){ //if the robot is being calibrated check if center is calibrated
-                        if(!positionAdjusted){ //if adjusts were not set
-                            positionAdjusted = true;
-                            posAdjustX = fabs(req.currLocationX);
-                            posAdjustY = fabs(req.currLocationY);
-                            ROS_INFO("Setting adjustments: X:%f, Y:%f" , posAdjustX, posAdjustY );
-                        }
-                    }
-                    res.posAdjustX = posAdjustX;
-                    res.posAdjustY = posAdjustY;
-                    res.positionAdjusted = positionAdjusted;
                     res.calibrate = true;
                     ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
                     return true;

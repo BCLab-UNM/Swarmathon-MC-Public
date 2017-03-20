@@ -14,27 +14,29 @@ SearchController::SearchController() {
 /**
  * This code implements a basic random walk search.
  */
-geometry_msgs::Pose2D SearchController::search(float startSearchWidth, float endSearchWidth, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation) {
+geometry_msgs::Pose2D SearchController::search(int id, geometry_msgs::Pose2D centerLocation, geometry_msgs::Pose2D currentLocation) {
   geometry_msgs::Pose2D goalLocation;
 
-    ROS_INFO("heySearch");
-    if(!stop){
-        if(this->first)
-        {
-          //currentLocation.theta = 0;
-          goalLocation.theta = currentLocation.theta + (M_PI/2);
-          ratio = startSearchWidth*2;
-          //this->first = false;
-          this->stop = false;
-        }
-        else
-        {
-            //select new heading from Gaussian distribution around current heading
-            goalLocation.theta = currentLocation.theta + (M_PI/2);//rng->gaussianussian(currentLocation.theta, 0.25);
-            /*if(currentLocation.theta >= (3.14/2)*4){
-                goalLocation.theta = 0;
-            }*/
-        }
+   ROS_INFO("heySearch");
+
+    /*if(this->first)
+    {
+      //currentLocation.theta = 0;
+      goalLocation.theta = (3.14/2)*counter;
+      this->first = false;
+      this->stop = false;
+    }
+    else
+    {
+        //select new heading from Gaussian distribution around current heading
+        goalLocation.theta = currentLocation.theta + (3.14/2);//rng->gaussianussian(currentLocation.theta, 0.25);
+
+    }
+
+    if(this->numOfItr == 2){
+        this->ratio += 0.5;
+        this->numOfItr = 0;
+    }
 
         if(this->numOfItr == 2){
             this->ratio -= 0.5;
@@ -53,7 +55,7 @@ geometry_msgs::Pose2D SearchController::search(float startSearchWidth, float end
                 //spinWasTrue = true; only turn on for random walk to center
                 stop = true;
             }
-        } else {*/
+        } else {
         if(ratio <= endSearchWidth){
             stop = true;
             return currentLocation;
@@ -70,8 +72,18 @@ geometry_msgs::Pose2D SearchController::search(float startSearchWidth, float end
 
             this->numOfItr++;
         }
+    } else {
+        //select new position 50 cm from current location
+        goalLocation.x = currentLocation.x + (ratio * cos(goalLocation.theta));
+        goalLocation.y = currentLocation.y + (ratio* sin(goalLocation.theta));
+        this->numOfItr++;
+*/
+    if(!stop){
+        goalLocation.x = -4;
+        goalLocation.y = -4;
+        goalLocation.theta = goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+        stop = true;
     }
-
 
 
     return goalLocation;

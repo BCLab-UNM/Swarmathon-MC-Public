@@ -292,7 +292,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.2;
+    float rotateOnlyAngleTolerance = 0.1;
     int returnToSearchDelay = 5;
 
     // calls the averaging function, also responsible for
@@ -425,7 +425,12 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                goalLocation = searchController.search(startSearchWidth, endSearchWidth, newCenterLocation, currentLocation);
+                goalLocation = searchController.search(id, centerLocationOdom, currentLocation);
+                //recalculate the heading based on the calibrate
+                goalLocation.x = getNewGoalX(goalLocation.x);
+                goalLocation.y = getNewGoalY(goalLocation.y);
+                goalLocation.theta = goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
             }
 
             //Purposefully fall through to next case without breaking
@@ -444,6 +449,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
                 // rotate but dont drive  0.05 is to prevent turning in reverse
                 sendDriveCommand(0.05, errorYaw);
+                //sendDriveCommand(0, errorYaw);
                 break;
             } else {
                 // move to differential drive step
@@ -480,36 +486,10 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         ROS_INFO("Calibrated Center");
                         //if center has been reached
                         calibratedOnCenter = true;
+                        calibratedOnStart = true;
                         posAdjustX = currentLocation.x;
                         posAdjustY = currentLocation.y;
                         newCenterLocation = currentLocation;
-                        //send a request that center has been found
-                        hive_srv::calibrate srv;
-                        srv.request.robotName = publishedName;
-                        srv.request.calibratedOnCenter = calibratedOnCenter;
-                        srv.request.calibratedOnStart = calibratedOnStart;
-                        srv.request.currLocationX = currentLocation.x;
-                        srv.request.currLocationY = currentLocation.y;
-                        if(calibrationClient.call(srv)){
-
-                        } else {
-                            ROS_INFO("Could not calibrate the first rover. Something happened");
-                            return;
-                        }
-
-                    }
-
-
-                    stateMachineState = STATE_MACHINE_CALIBRATE;
-                    break;
-                }
-
-                if(calibratedOnCenter && !calibratedOnStart){
-                    if(fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(getNewGoalY(startLocation.y) - currentLocation.y, getNewGoalX(startLocation.x) - currentLocation.x))) > M_PI_2){
-                        //if center has been reached
-                        ROS_INFO("calibrated start");
-                        calibratedOnStart = true;
-                        startLocation = currentLocation;
                     }
                     stateMachineState = STATE_MACHINE_CALIBRATE;
                     break;
@@ -598,69 +578,30 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 if(srv.response.calibrate == true){
                     ROS_INFO("Calibrate: %s", srv.response.calibrate ? "true" : "false");
                     if(!calibratedOnCenter){
-                        if(srv.response.positionAdjusted){
-                            if(currentLocation.theta < 0){
-                                posAdjustX = srv.response.posAdjustX * -1;
-                                posAdjustY = srv.response.posAdjustY * -1;
-                            } else {
-                                posAdjustX = srv.response.posAdjustX;
-                                posAdjustY = srv.response.posAdjustY;
-                            }
-                            calibratedOnCenter = true;
-                            break;
-                        } else {
-                            if(!avoidingObstacle){ //if runing first time with no obsticles
-                                goalLocation.theta = currentLocation.theta;
-                                goalLocation.x = currentLocation.x + (1.15 * cos(goalLocation.theta));
-                                goalLocation.y = currentLocation.y + (1.15 * sin(goalLocation.theta));
-                                newCenterLocation = goalLocation; //set the new center location
-                                stateMachineState = STATE_MACHINE_ROTATE;
-                                ROS_INFO("Going to center: %s", publishedName.c_str() ? "true" : "false");
-                            } else { //if got an obsticle and recentering
-                                goalLocation.x = newCenterLocation.x;
-                                goalLocation.y = newCenterLocation.y;
-                                goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
-                                ROS_INFO("Going to center after interuption: %s", publishedName.c_str() ? "true" : "false");
-                                stateMachineState = STATE_MACHINE_ROTATE;
-                            }
-                            break;
-                        }
-                    } else if (calibratedOnCenter && !calibratedOnStart){ //if center is calibrated go to start
-                        hive_srv::setArena srvSearch;
-                        srvSearch.request.robotName = publishedName;
-                        if(setArenaClient.call(srvSearch)){ //request a starting position
-                            startSearchWidth = srvSearch.response.searchStartWidth;
-                            endSearchWidth = srvSearch.response.searchEndWidth;
-                            ROS_INFO("Start %f:, End: %f ", startSearchWidth, endSearchWidth);
-                        } else {
-                            ROS_INFO("Could not call set arena");
-                        }
-                        searchVelocity = 1;
-                        if(!avoidingObstacle){
-                            goalLocation.theta = currentLocation.theta + 3.14; //heading
-                            //adjust desired heading
-                            goalLocation.x = currentLocation.x + (startSearchWidth * cos(goalLocation.theta));
-                            goalLocation.y = currentLocation.y + (startSearchWidth * sin(goalLocation.theta));
+                        if(!avoidingObstacle){ //if runing first time with no obsticles
+                            goalLocation.theta = currentLocation.theta;
+                            goalLocation.x = currentLocation.x + (1.15 * cos(goalLocation.theta));
+                            goalLocation.y = currentLocation.y + (1.15 * sin(goalLocation.theta));
+                            newCenterLocation = goalLocation; //set the new center location
                             stateMachineState = STATE_MACHINE_ROTATE;
-                            startLocation = goalLocation;
-                            ROS_INFO("Going to starting location: %s", publishedName.c_str() ? "true" : "false");
-                        } else {
-                            avoidingObstacle = false;
-                            goalLocation.x = startLocation.x;
-                            goalLocation.y = startLocation.y;
-                            goalLocation.theta = atan2(getNewGoalY(startLocation.x) - currentLocation.y, getNewGoalX(startLocation.x) - currentLocation.x);
+                            ROS_INFO("Going to center: %s", publishedName.c_str() ? "true" : "false");
+                        } else { //if got an obsticle and recentering
+                            goalLocation.x = newCenterLocation.x;
+                            goalLocation.y = newCenterLocation.y;
+                            goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
+                            ROS_INFO("Going to center after interuption: %s", publishedName.c_str() ? "true" : "false");
                             stateMachineState = STATE_MACHINE_ROTATE;
-                            ROS_INFO("Going to start position after interuption: %s", publishedName.c_str() ? "true" : "false");
                         }
+                        break;
                     }
-                } else if (calibratedOnCenter && calibratedOnStart && srv.response.calibrate == false) {
+                } else if (calibratedOnCenter && srv.response.calibrate == false) {
                     //we have calibrated go to transform
-                    //ROS_INFO("Back to transform");
+                    ROS_INFO("Back to transform");
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                     break;
-                } else {
+                }  else {
                     //dont start calibrating robot yet
-                    //ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
+                    ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
                 }
 
             } else {
