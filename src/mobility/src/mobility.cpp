@@ -4,7 +4,7 @@
 #include "hive_srv//hiveSrv.h"
 #include "hive_srv//hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
-#include "hive_srv/setArena.h"
+
 
 // ROS libraries
 #include <angles/angles.h>
@@ -135,7 +135,7 @@ char prev_state_machine[128];
 //Servers
 ros::ServiceClient addRobotClient;
 ros::ServiceClient calibrationClient;
-ros::ServiceClient setArenaClient;
+
 //calibration variable
 bool calibratedOnCenter = false;
 bool calibratedOnStart = false;
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
     //create clients
     addRobotClient = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
     calibrationClient = mNH.serviceClient<hive_srv::calibrate>("calibration");
-    setArenaClient = mNH.serviceClient<hive_srv::setArena>("set_arena");
+
 
 
     ros::spin();
@@ -292,7 +292,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.1;
+    float rotateOnlyAngleTolerance = 0.4;
     int returnToSearchDelay = 5;
 
     // calls the averaging function, also responsible for
@@ -327,6 +327,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 srv.request.currTheta = currentLocation.theta;
                 if(addRobotClient.call(srv)){
                     ROS_INFO("All good");
+                    id = srv.response.robotIdInHive;
                 }else{
                     ROS_ERROR("Fuck");
                 }
@@ -425,11 +426,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                goalLocation = searchController.search(id, centerLocationOdom, currentLocation);
+                goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
                 //recalculate the heading based on the calibrate
-                goalLocation.x = getNewGoalX(goalLocation.x);
-                goalLocation.y = getNewGoalY(goalLocation.y);
-                goalLocation.theta = goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                //goalLocation.x = getNewGoalX(goalLocation.x);
+                //goalLocation.y = getNewGoalY(goalLocation.y);
+                //goalLocation.theta = atan2(goalLocation.y - getNewGoalY(currentLocation.y), goalLocation.x - getNewGoalX(currentLocation.x));
 
             }
 
@@ -569,13 +570,16 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         }
         //each robot checks if it is its turn to calibrate
         case STATE_MACHINE_CALIBRATE: {
-            searchVelocity = 0.7;
+            searchVelocity = 0.5;
             hive_srv::calibrate srv;
             srv.request.robotName = publishedName;
             srv.request.calibratedOnCenter = calibratedOnCenter;
             srv.request.calibratedOnStart = calibratedOnStart;
+            srv.request.currLocationX = currentLocation.x;
+            srv.request.currLocationY = currentLocation.y;
             if(calibrationClient.call(srv)){
                 if(srv.response.calibrate == true){
+                    sleep(7); //sleep 7 secs to let the other robot start driving away. can set to more
                     ROS_INFO("Calibrate: %s", srv.response.calibrate ? "true" : "false");
                     if(!calibratedOnCenter){
                         if(!avoidingObstacle){ //if runing first time with no obsticles
@@ -596,6 +600,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
                 } else if (calibratedOnCenter && srv.response.calibrate == false) {
                     //we have calibrated go to transform
+                    searchVelocity = 1;
                     ROS_INFO("Back to transform");
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                     break;
@@ -697,11 +702,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
         // if we see the center and we dont have a target collected
         if (centerSeen && !targetCollected) {
-            if (!calibratedOnCenter){
-                //drive 0.7 meter forward
-            } else if (calibratedOnCenter && !calibratedOnStart){
 
-            } else {
                 /*float centeringTurn = 0.15; //radians
                 stateMachineState = STATE_MACHINE_TRANSFORM;
 
@@ -722,7 +723,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
                 targetDetected = false;
                 pickUpController.reset();*/
-            }
+
 
 
             return;

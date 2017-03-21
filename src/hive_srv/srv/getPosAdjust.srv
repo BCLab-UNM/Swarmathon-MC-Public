@@ -1,0 +1,4 @@
+string robotName
+---
+float32 posAdjustX
+float32 posAdjustY

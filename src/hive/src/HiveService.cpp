@@ -34,6 +34,7 @@ using namespace std;
 #include "hive_srv/hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
 #include "hive_srv/setArena.h"
+#include "hive_srv/getPosAdjust.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -41,8 +42,7 @@ int robotCounter = 0;
 
 //position adjusts
 bool positionAdjusted = false;
-float posAdjustX = -10;
-float posAdjustY = -10;
+
 
 
 /*
@@ -84,8 +84,6 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
                 } else if(((Robot)robotList.at(i-1)).calibrated == true) {
                     ROS_INFO("Calibrating robot named: %s", ((std::string)req.robotName).c_str());
                     res.calibrate = true;
-                    res.posAdjustX = posAdjustX;
-                    res.posAdjustY = posAdjustY;
                     res.positionAdjusted = positionAdjusted;
                     return true;
                 } else {
@@ -94,7 +92,9 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
                     return true;
                 }
             } else {
-                Robot & r = robotList.at(i);
+                Robot &r = robotList.at(i);
+                r.posAdjustX = req.currLocationX; //set the adjusts if in the center
+                r.posAdjustY = req.currLocationY;
                 r.calibrated = true;
                 return true;
             }
@@ -141,6 +141,21 @@ bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &re
 }
 
 
+bool getPosAdjust(hive_srv::getPosAdjust::Request &req, hive_srv::getPosAdjust::Response &res){
+    string name = req.robotName;
+    for(int i = 0; i<robotList.size(); i++){
+        if(name == ((Robot)robotList.at(i)).name){ //find the robot in list
+            Robot &r = robotList.at(i);
+            res.posAdjustX = r.posAdjustX;
+            res.posAdjustY = r.posAdjustY;
+        }
+
+    }
+
+    return true;
+}
+
+
 int main(int argc, char **argv){
     ros::init(argc, argv, "hive_server"); //initialize the server (not really important to know what it does)
     ros::NodeHandle n; //create a node handle
@@ -154,6 +169,8 @@ int main(int argc, char **argv){
     ros::ServiceServer s3 = n.advertiseService("calibration", calibration);
 
     ros::ServiceServer s4 = n.advertiseService("set_arena", setArena);
+
+    ros::ServiceServer s5 = n.advertiseService("get_pos_adjust", getPosAdjust);
 
     ROS_INFO("Ready to add two ints.");
 

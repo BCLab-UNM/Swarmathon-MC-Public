@@ -11,6 +11,10 @@ public: //bad practive to make everyhting publick but works faster
     int id;
     bool calibrated;
 
+    //position adjusts
+    float posAdjustX;
+    float posAdjustY;
+
     Robot(std::string name, int id);
 
 
