@@ -292,7 +292,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.4;
+    float rotateOnlyAngleTolerance = 0.1;
     int returnToSearchDelay = 5;
 
     // calls the averaging function, also responsible for
