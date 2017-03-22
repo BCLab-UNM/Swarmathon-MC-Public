@@ -107,6 +107,8 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
        if(setArenaClient.call(srv)){
            startSearchWidth = srv.response.searchStartWidth;
            endSearchWidth = srv.response.searchEndWidth;
+           startSearchWidth = 2;
+           endSearchWidth = 1;
        } else {
            ROS_INFO("Could not call set arena client");
        }
@@ -180,8 +182,8 @@ geometry_msgs::Pose2D SearchController::continueInterruptedSearch(geometry_msgs:
 
   //this of course assumes random walk continuation. Change for diffrent search methods.
   newGoalLocation.theta = oldGoalLocation.theta;
-  newGoalLocation.x = currentLocation.x + (0.50 * cos(oldGoalLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
-  newGoalLocation.y = currentLocation.y + (0.50 * sin(oldGoalLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
+  newGoalLocation.x = currentLocation.x + (1 * cos(oldGoalLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+  newGoalLocation.y = currentLocation.y + (1 * sin(oldGoalLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
 
   return newGoalLocation;
 }
