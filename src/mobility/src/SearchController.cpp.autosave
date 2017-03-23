@@ -160,7 +160,6 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
        }
 
    }
-    ROS_INFO("Returning to transform from searchController");
     return goalLocation;
 }
 

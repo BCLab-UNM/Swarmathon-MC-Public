@@ -5,6 +5,9 @@
 #include "hive_srv//hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
 
+//include ObstacleStack
+#include "ObstacleStack.h"
+
 
 // ROS libraries
 #include <angles/angles.h>
@@ -69,6 +72,7 @@ geometry_msgs::Pose2D centerLocationOdom;
 geometry_msgs::Pose2D newCenterLocation;
 geometry_msgs::Pose2D startLocation;
 geometry_msgs::Pose2D interruptedLocation;
+geometry_msgs::Pose2D interruptedLocationFrom; //point from which we got interupted
 
 static int counter;
 int id;
@@ -148,6 +152,10 @@ float startSearchWidth = 0;
 float endSearchWidth = 0;
 //used to level out th erobot to its pas theta after interuption
 float levelOut = false;
+
+
+//all the obstacles that piled up that will be processed to return us to our path basically
+ObstacleStack interruptionsStack;
 
 // Publishers
 ros::Publisher stateMachinePublish;
@@ -295,7 +303,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.1;
+    float rotateOnlyAngleTolerance = 0.2;
     int returnToSearchDelay = 5;
 
     // calls the averaging function, also responsible for
@@ -368,8 +376,8 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             if (targetCollected && !avoidingObstacle) {
                 // calculate the euclidean distance between
                 // centerLocation and currentLocation
-                dropOffController.setCenterDist(hypot(centerLocation.x - currentLocation.x, centerLocation.y - currentLocation.y));
-                dropOffController.setDataLocations(centerLocation, currentLocation, timerTimeElapsed);
+                dropOffController.setCenterDist(hypot(newCenterLocation.x - currentLocation.x, newCenterLocation.y - currentLocation.y));
+                dropOffController.setDataLocations(newCenterLocation, currentLocation, timerTimeElapsed);
 
                 DropOffResult result = dropOffController.getState();
 
@@ -429,26 +437,30 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                //if search was interrupted
-                if(avoidingObstacle){
-                    ROS_INFO("Going back to old location x:%f, y:%f, robot:%s", interruptedLocation.x, interruptedLocation.y, publishedName.c_str());
-                    goalLocation.x = interruptedLocation.x;
-                    goalLocation.y = interruptedLocation.y;
-                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
-                    avoidingObstacle = false;
-                    levelOut = true;
-                } else if (!avoidingObstacle && levelOut ){
-                    goalLocation.theta = interruptedLocation.theta;
-                    levelOut =false;
-                } else{
+                //if movement stack has interruptions
+                if(!interruptionsStack.isEmpty()){
+                    //first check if we drove to the restore point
+                    if(!interruptionsStack.isAtRestore()){
+                        ROS_INFO("Restore");
+                        goalLocation.x = interruptionsStack.getRestoreLocation().x;
+                        goalLocation.y = interruptionsStack.getRestoreLocation().y;
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                        interruptionsStack.setRestore();
+                    } else if(!interruptionsStack.isAtOldGoal()){
+                        ROS_INFO("old goal");
+                        goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
+                        goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                        interruptionsStack.setOldGoal();
+                    } else if(!interruptionsStack.isLeveled()){
+                        ROS_INFO("level");
+                        goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
+                        interruptionsStack.popStack();
+                    }
+
+                } else {
                     goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
                 }
-
-                //recalculate the heading based on the calibrate
-                //goalLocation.x = getNewGoalX(goalLocation.x);
-                //goalLocation.y = getNewGoalY(goalLocation.y);
-                //goalLocation.theta = atan2(goalLocation.y - getNewGoalY(currentLocation.y), goalLocation.x - getNewGoalX(currentLocation.x));
-
             }
 
             //Purposefully fall through to next case without breaking
@@ -491,7 +503,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 sendDriveCommand(searchVelocity, errorYaw/2);
             }
             // goal is reached but desired heading is still wrong turn only
-            else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > 0.1) {
+            else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
                  // rotate but dont drive
                 sendDriveCommand(0.0, errorYaw);
             }
@@ -587,7 +599,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         }
         //each robot checks if it is its turn to calibrate
         case STATE_MACHINE_CALIBRATE: {
-            searchVelocity = 0.5;
+            searchVelocity = 0.7;
             hive_srv::calibrate srv;
             srv.request.robotName = publishedName;
             srv.request.calibratedOnCenter = calibratedOnCenter;
@@ -623,7 +635,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     break;
                 }  else {
                     //dont start calibrating robot yet
-                    ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
+                    //ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
                 }
 
             } else {
@@ -780,15 +792,24 @@ void modeHandler(const std_msgs::UInt8::ConstPtr& message) {
 
 void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
     if(calibratedOnCenter){
-
         if ((!targetDetected || targetCollected) && (message->data > 0)) {
-            if(!avoidingObstacle){
-                ROS_INFO("Avoiding the obstacle. Location to come back to is x:%f y:%f", goalLocation.x,
-                         goalLocation.y);
-                ROS_INFO("Currenct location is x:%f y:%f", currentLocation.x,
-                         currentLocation.y);
-                interruptedLocation = goalLocation;
+            //set the old goal
+            geometry_msgs::Pose2D oldGoal;
+            oldGoal = goalLocation;
+            //set the reset
+            geometry_msgs::Pose2D reset;
+            //in current direction
+            reset.theta = currentLocation.theta;
+            //what will be the coords of one meter offset
+            double remainingGoalDist = hypot(goalLocation.x - currentLocation.x, goalLocation.y - currentLocation.y);
+            if(remainingGoalDist > 1){
+                reset.x = currentLocation.x + (1 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+                reset.y = currentLocation.y + (1 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
+            } else {
+                reset.x = currentLocation.x + (remainingGoalDist * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+                reset.y = currentLocation.y + (remainingGoalDist * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
             }
+
 
             // obstacle on right side
             if (message->data == 1) {
@@ -805,10 +826,10 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
             // continues an interrupted search
             goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
 
+            interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+
             // switch to transform state to trigger collision avoidance
             stateMachineState = STATE_MACHINE_ROTATE;
-
-
 
             avoidingObstacle = true;
         }
