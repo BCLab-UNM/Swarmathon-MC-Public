@@ -152,7 +152,8 @@ float startSearchWidth = 0;
 float endSearchWidth = 0;
 //used to level out th erobot to its pas theta after interuption
 float levelOut = false;
-
+//double check of the turn
+bool doubleCheck = false;
 
 //all the obstacles that piled up that will be processed to return us to our path basically
 ObstacleStack interruptionsStack;
@@ -424,6 +425,22 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                     break;
                 }
+            } else if(!interruptionsStack.isEmpty()){
+                if(!interruptionsStack.isAtOldGoal()){
+                    ROS_INFO("old goal");
+                    goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
+                    goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
+                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                    interruptionsStack.setOldGoal();
+                } else if(!interruptionsStack.isLeveled()){
+                    ROS_INFO("level");
+                    goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
+                    interruptionsStack.setLeveled();
+                } else {
+                    goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
+                    interruptionsStack.popStack();
+                }
+
             }
             //If angle between current and goal is significant
             //if error in heading is greater than 0.4 radians
@@ -438,29 +455,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
                 //if movement stack has interruptions
-                if(!interruptionsStack.isEmpty()){
-                    //first check if we drove to the restore point
-                    if(!interruptionsStack.isAtRestore()){
-                        ROS_INFO("Restore");
-                        goalLocation.x = interruptionsStack.getRestoreLocation().x;
-                        goalLocation.y = interruptionsStack.getRestoreLocation().y;
-                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
-                        interruptionsStack.setRestore();
-                    } else if(!interruptionsStack.isAtOldGoal()){
-                        ROS_INFO("old goal");
-                        goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
-                        goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
-                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
-                        interruptionsStack.setOldGoal();
-                    } else if(!interruptionsStack.isLeveled()){
-                        ROS_INFO("level");
-                        goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
-                        interruptionsStack.popStack();
-                    }
-
-                } else {
-                    goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
-                }
+                goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
             }
 
             //Purposefully fall through to next case without breaking
@@ -482,9 +477,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 //sendDriveCommand(0, errorYaw);
                 break;
             } else {
-                // move to differential drive step
                 stateMachineState = STATE_MACHINE_SKID_STEER;
-                //fall through on purpose.
             }
         }
 
@@ -525,8 +518,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     break;
                 }
 
-
-                ROS_INFO("Back to transform");
                 //move back to transform step
                 stateMachineState = STATE_MACHINE_TRANSFORM;
             }
@@ -800,34 +791,43 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
             geometry_msgs::Pose2D reset;
             //in current direction
             reset.theta = currentLocation.theta;
-            //what will be the coords of one meter offset
-            double remainingGoalDist = hypot(goalLocation.x - currentLocation.x, goalLocation.y - currentLocation.y);
-            if(remainingGoalDist > 1){
-                reset.x = currentLocation.x + (1 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
-                reset.y = currentLocation.y + (1 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
-            } else {
-                reset.x = currentLocation.x + (remainingGoalDist * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
-                reset.y = currentLocation.y + (remainingGoalDist * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
-            }
+            //what will be the coords of half meter offset
+            //double remainingGoalDist = hypot(goalLocation.x - currentLocation.x, goalLocation.y - currentLocation.y);
+
+            //reset.x = currentLocation.x + (0.5 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+            //reset.y = currentLocation.y + (0.5 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
+            reset.x = currentLocation.x + 0.5;
+            reset.y = currentLocation.y + 0.5;
 
 
             // obstacle on right side
             if (message->data == 1) {
                 // select new heading 0.2 radians to the left
-                goalLocation.theta = currentLocation.theta + 0.6;
+                goalLocation.theta = currentLocation.theta + M_PI/4;
             }
 
             // obstacle in front or on left side
             else if (message->data == 2) {
                 // select new heading 0.2 radians to the right
-                goalLocation.theta = currentLocation.theta + 0.6;
+                goalLocation.theta = currentLocation.theta - M_PI/4;
             }
 
             // continues an interrupted search
-            goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
 
-            interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+            if(!interruptionsStack.isEmpty()){ //if we have an element in the stack
+                //check if we rotated to the previous interuption before placing a new interuption in the stack
+                //if the angle is below the tolarance that means we rotated and there is still something in front of us
+                if(fabs(angles::shortest_angular_distance(currentLocation.theta, interruptionsStack.getInterruptedLocation().theta)) < 0.1){
+                    goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+                    interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+                     ROS_INFO("Collision");
+                }
 
+            } else {
+                 ROS_INFO("Collision");
+                goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+                interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+            }
             // switch to transform state to trigger collision avoidance
             stateMachineState = STATE_MACHINE_ROTATE;
 

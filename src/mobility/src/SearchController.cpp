@@ -160,7 +160,7 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
        }
 
    }
-    ROS_INFO("Returning to transform from searchController");
+    //ROS_INFO("Returning to transform from searchController");
     return goalLocation;
 }
 
@@ -183,8 +183,8 @@ geometry_msgs::Pose2D SearchController::continueInterruptedSearch(geometry_msgs:
 
   //this of course assumes random walk continuation. Change for diffrent search methods.
   newGoalLocation.theta = oldGoalLocation.theta;
-  newGoalLocation.x = currentLocation.x + (1 * cos(oldGoalLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
-  newGoalLocation.y = currentLocation.y + (1 * sin(oldGoalLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
+  newGoalLocation.x = currentLocation.x + (0.5 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+  newGoalLocation.y = currentLocation.y + (0.5 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
 
   return newGoalLocation;
 }

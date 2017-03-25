@@ -19,10 +19,10 @@ public:
     void addToStack(geometry_msgs::Pose2D currentLocation, geometry_msgs::Pose2D interrupt, geometry_msgs::Pose2D restore, geometry_msgs::Pose2D goalOfInterruption);
     void popStack(); //pop the stack
     //get the lcations that are being worked on
-    geometry_msgs::Pose2D getCurrLocation() {return currentStack.top();}
-    geometry_msgs::Pose2D getInterruptedLocation(){return interruptStack.top();}
-    geometry_msgs::Pose2D getRestoreLocation(){return restoreStack.top();}
-    geometry_msgs::Pose2D getGoalOfInterruption(){return goalOfInterruption.top();}
+    geometry_msgs::Pose2D getCurrLocation() {return (geometry_msgs::Pose2D)currentStack.top();}
+    geometry_msgs::Pose2D getInterruptedLocation(){return (geometry_msgs::Pose2D)interruptStack.top();}
+    geometry_msgs::Pose2D getRestoreLocation(){return (geometry_msgs::Pose2D)restoreStack.top();}
+    geometry_msgs::Pose2D getGoalOfInterruption(){return (geometry_msgs::Pose2D)goalOfInterruption.top();}
 
     void setRestore(){
         this->atRestore.pop();
@@ -37,10 +37,10 @@ public:
         this->leveled.push(true);
     }
 
-    bool isAtOldGoal(){return atOldGoal.top();}
-    bool isLeveled(){return leveled.top();}
-    bool isAtRestore(){return atRestore.top();}
-    bool isEmpty(){return currentStack.empty();}
+    bool isAtOldGoal(){return (bool)atOldGoal.top();}
+    bool isLeveled(){return (bool)leveled.top();}
+    bool isAtRestore(){return (bool)atRestore.top();}
+    bool isEmpty(){return (bool)currentStack.empty();}
 
 
 };
