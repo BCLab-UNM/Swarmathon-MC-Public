@@ -155,6 +155,9 @@ float levelOut = false;
 //double check of the turn
 bool doubleCheck = false;
 
+//counter of the targets. Used to tell the hive if cluster
+int targetCounter = 0;
+
 //all the obstacles that piled up that will be processed to return us to our path basically
 ObstacleStack interruptionsStack;
 
@@ -304,7 +307,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.2;
+    float rotateOnlyAngleTolerance = 0.3;
     int returnToSearchDelay = 5;
 
     // calls the averaging function, also responsible for
@@ -425,22 +428,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                     break;
                 }
-            } else if(!interruptionsStack.isEmpty()){
-                if(!interruptionsStack.isAtOldGoal()){
-                    ROS_INFO("old goal");
-                    goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
-                    goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
-                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
-                    interruptionsStack.setOldGoal();
-                } else if(!interruptionsStack.isLeveled()){
-                    ROS_INFO("level");
-                    goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
-                    interruptionsStack.setLeveled();
-                } else {
-                    goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
-                    interruptionsStack.popStack();
-                }
-
             }
             //If angle between current and goal is significant
             //if error in heading is greater than 0.4 radians
@@ -455,7 +442,27 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
                 //if movement stack has interruptions
-                goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
+                if(!interruptionsStack.isEmpty()){
+                    if(!interruptionsStack.isAtOldGoal()){
+                        ROS_INFO("old goal");
+                        goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
+                        goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                        interruptionsStack.setOldGoal();
+                    } else if(!interruptionsStack.isLeveled()){
+                        ROS_INFO("level");
+                        goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
+                        goalLocation.x = currentLocation.x;
+                        goalLocation.y = currentLocation.y;
+                        interruptionsStack.setLeveled();
+                    } else {
+                        goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
+                        interruptionsStack.popStack();
+                    }
+
+                } else {
+                   goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
+                }
             }
 
             //Purposefully fall through to next case without breaking
@@ -520,6 +527,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                 //move back to transform step
                 stateMachineState = STATE_MACHINE_TRANSFORM;
+                avoidingObstacle = false;
             }
 
             break;
@@ -684,6 +692,8 @@ void sendDriveCommand(double linearVel, double angularError)
 void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& message) {
 
     // If in manual mode do not try to automatically pick up the target
+    if(!calibratedOnCenter) return;
+
     if (currentMode == 1 || currentMode == 0) return;
 
     // if a target is detected and we are looking for center tags
@@ -710,6 +720,8 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
                 centerSeen = true;
                 count++;
+            } else {
+                targetCounter++;
             }
         }
 
@@ -794,10 +806,8 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
             //what will be the coords of half meter offset
             //double remainingGoalDist = hypot(goalLocation.x - currentLocation.x, goalLocation.y - currentLocation.y);
 
-            //reset.x = currentLocation.x + (0.5 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
-            //reset.y = currentLocation.y + (0.5 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
-            reset.x = currentLocation.x + 0.5;
-            reset.y = currentLocation.y + 0.5;
+            reset.x = currentLocation.x + (0.5 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+            reset.y = currentLocation.y + (0.5 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
 
 
             // obstacle on right side
@@ -820,17 +830,17 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
                 if(fabs(angles::shortest_angular_distance(currentLocation.theta, interruptionsStack.getInterruptedLocation().theta)) < 0.1){
                     goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
                     interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
-                     ROS_INFO("Collision");
+                    ROS_INFO("Collision");
                 }
-
             } else {
-                 ROS_INFO("Collision");
+                ROS_INFO("Collision");
                 goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
                 interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+
             }
             // switch to transform state to trigger collision avoidance
             stateMachineState = STATE_MACHINE_ROTATE;
-
+            ROS_INFO("Collision");
             avoidingObstacle = true;
         }
 

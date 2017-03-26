@@ -51,8 +51,10 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
         //if in a counting state and has been counting for 1 second
         else if (Td > 1 && Td < 2.5)
         {
-            result.cmdVel = -0.2;
-            result.angleError = 0.0;
+            //result.cmdVel = -0.2;
+            //result.angleError = 0.0;
+            result.cmdVel = 0; //make robot stay in place when searching fot the lost cube
+            result.angleError = -blockYawError/2; //turn to find the lost cube in the previously seen dirrection
         }
     }
     else if (blockDist > targetDist && !lockTarget) //if a target is detected but not locked, and not too close.
@@ -81,7 +83,7 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
     }
     else if (Td > 1.7) //close the fingers and stop driving
     {
-        result.cmdVel = -0.1;
+        result.cmdVel = 0.1;
         result.angleError = 0.0;
         result.fingerAngle = 0;
         return result;
