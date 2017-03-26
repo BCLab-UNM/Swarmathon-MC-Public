@@ -155,6 +155,9 @@ float levelOut = false;
 //double check of the turn
 bool doubleCheck = false;
 
+//DROP AND PICKUP STUFFS
+bool returnAfterDropOffSet = false;
+
 //counter of the targets. Used to tell the hive if cluster
 int targetCounter = 0;
 
@@ -346,7 +349,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 }else{
                     ROS_ERROR("Fuck");
                 }
-
+                pickUpController.setName(publishedName);
             } else {
                 return;
             }
@@ -407,14 +410,15 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     targetCollected = false;
                     targetDetected = false;
                     lockTarget = false;
-                    sendDriveCommand(0.0,0);
+                    sendDriveCommand(0,0);
 
                     // move back to transform step
                     stateMachineState = STATE_MACHINE_TRANSFORM;
-                    reachedCollectionPoint = false;;
-                    centerLocationOdom = currentLocation;
+                    reachedCollectionPoint = false;
+                    //centerLocationOdom = currentLocation;
 
                     dropOffController.reset();
+                    returnAfterDropOffSet = false;
                 } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
                     goalLocation = result.centerGoal;
                     stateMachineState = STATE_MACHINE_ROTATE;
@@ -422,10 +426,9 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 }
                 // we are in precision/timed driving
                 else {
-                    goalLocation = currentLocation;
                     sendDriveCommand(result.cmdVel,result.angleError);
                     stateMachineState = STATE_MACHINE_TRANSFORM;
-
+                    goalLocation = currentLocation;
                     break;
                 }
             }
@@ -540,6 +543,14 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
             // we see a block and have not picked one up yet
             if (targetDetected && !targetCollected) {
+                //set the interruption in the interruption stack so that we can come back to search after  drop off
+                //if we have not set a goal of return
+                if(!returnAfterDropOffSet){
+                    //set the restore point
+                    interruptionsStack.addToStack(currentLocation, currentLocation, goalLocation, goalLocation);
+                    returnAfterDropOffSet = true; //set flag to true so that we do not set new goal
+                }
+
                 result = pickUpController.pickUpSelectedTarget(blockBlock);
                 sendDriveCommand(result.cmdVel,result.angleError);
                 std_msgs::Float32 angle;
@@ -565,17 +576,18 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                 if (result.pickedUp) {
                     pickUpController.reset();
+                    //server drop off que add
 
                     // assume target has been picked up by gripper
                     targetCollected = true;
                     result.pickedUp = false;
                     stateMachineState = STATE_MACHINE_ROTATE;
 
-                    goalLocation.theta = atan2(centerLocationOdom.y - currentLocation.y, centerLocationOdom.x - currentLocation.x);
+                    goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
 
                     // set center as goal position
-                    goalLocation.x = centerLocationOdom.x;
-                    goalLocation.y = centerLocationOdom.y;
+                    goalLocation.x = newCenterLocation.x;
+                    goalLocation.y = newCenterLocation.y;
 
                     // lower wrist to avoid ultrasound sensors
                     std_msgs::Float32 angle;
@@ -722,8 +734,11 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
                 count++;
             } else {
                 targetCounter++;
-            }
+            } 
         }
+        ROS_INFO("See this many targets: %d", targetCounter);
+        targetCounter = 0;
+
 
         if (centerSeen && targetCollected) {
             stateMachineState = STATE_MACHINE_TRANSFORM;
@@ -734,7 +749,6 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
         // if we see the center and we dont have a target collected
         if (centerSeen && !targetCollected) {
-
                 /*float centeringTurn = 0.15; //radians
                 stateMachineState = STATE_MACHINE_TRANSFORM;
 

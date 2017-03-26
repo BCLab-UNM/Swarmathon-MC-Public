@@ -1,0 +1,5 @@
+string robotName
+bool droppedOff
+---
+bool goToReadyPos
+bool goDropOff

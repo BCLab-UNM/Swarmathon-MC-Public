@@ -3,6 +3,7 @@
 #define HEADERFILE_H
 #include <apriltags_ros/AprilTagDetectionArray.h>
 #include <ros/ros.h>
+#include <string>
 
 struct PickUpResult {
   float cmdVel;
@@ -29,7 +30,10 @@ class PickUpController
 
   void reset();
 
+  void setName(std::string robotName){this->robotName = robotName;}
+
 private:
+  std::string robotName;
   //set true when the target block is less than targetDist so we continue attempting to pick it up rather than
   //switching to another block that is in view
   bool lockTarget; 

@@ -64,7 +64,7 @@ void DropOffController::calculateDecision() {
             angle= 0;
             result.wristAngle = angle; //raise wrist
 
-            result.cmdVel = -0.3;
+            result.cmdVel = -0.4;
             result.angleError = 0.0;
         }
         return;
