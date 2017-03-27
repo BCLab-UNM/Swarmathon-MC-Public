@@ -19,7 +19,7 @@ PickUpController::PickUpController() {
 
 PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
     //threshold distance to be from the target block before attempting pickup
-    float targetDist = 0.25; //meters
+    float targetDist = 0.20; //meters
 
 
     /*PickUpResult result;
@@ -83,7 +83,7 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
     }
     else if (Td > 1.7) //close the fingers and drive forward with little speed
     {
-        result.cmdVel = 0.1;
+        result.cmdVel = -0.1;
         result.angleError = 0.0;
         result.fingerAngle = 0;
         return result;

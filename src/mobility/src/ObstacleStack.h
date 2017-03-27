@@ -37,10 +37,29 @@ public:
         this->leveled.push(true);
     }
 
+    void unsetRestore(){
+        this->atRestore.pop();
+        this->atRestore.push(false);
+    }
+    void unsetOldGoal(){
+        this->atOldGoal.pop();
+        this->atOldGoal.push(false);
+    }
+    void unsetLeveled(){
+        this->leveled.pop();
+        this->leveled.push(false);
+    }
+
     bool isAtOldGoal(){return (bool)atOldGoal.top();}
     bool isLeveled(){return (bool)leveled.top();}
     bool isAtRestore(){return (bool)atRestore.top();}
     bool isEmpty(){return (bool)currentStack.empty();}
+
+    void resetInterruptedLocation(geometry_msgs::Pose2D location){
+        this->interruptStack.pop();
+        this->interruptStack.push(location);
+    }
+
 
 
 };

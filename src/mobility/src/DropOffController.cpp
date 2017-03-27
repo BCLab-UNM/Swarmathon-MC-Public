@@ -51,7 +51,7 @@ void DropOffController::calculateDecision() {
         //timerStartTime was reset before we entered reachedCollectionPoint so
         //we can now use it for our timeing of 2 seconds
 
-        if (timerTimeElapsed >= 4)
+        if (timerTimeElapsed >= 4)//drives back this many secs
         {
             result.reset = true; //tell mobility to reset to search parameters
         }
@@ -81,7 +81,7 @@ void DropOffController::calculateDecision() {
         result.centerGoal.y = centerLocation.y;
         //spinWasTrue = true; only turn on for random walk to center
     }
-    else if (timerTimeElapsed >=5)//spin search for center
+    else if (timerTimeElapsed >= 5)//spin search for center
     {
         //sets a goal that is 60cm from the centerLocation and spinner
         //radians counterclockwise from being purly along the x-axis.
@@ -110,26 +110,26 @@ void DropOffController::calculateDecision() {
         centerSeen = true;
         result.goalDriving = false;
 
-        if (seenEnoughCenterTags) //if we have seen enough tags
+        /*if (seenEnoughCenterTags) //if we have seen enough tags
         {
             if ((countLeft-5) > countRight) //and there are too many on the left
             {
-                right = false; //then we say non on the right to cause us to turn right
+                //right = false; //then we say non on the right to cause us to turn right
             }
             else if ((countRight-5) > countLeft)
             {
-                left = false; //or left in this case
+                //left = false; //or left in this case
             }
-        }
+        }*/
 
-        float turnDirection = 1;
+        //float turnDirection = 1;
         //reverse tag rejection when we have seen enough tags that we are on a
         //trajectory in to the square we dont want to follow an edge.
-        if (seenEnoughCenterTags) turnDirection = -1;
+        //if (seenEnoughCenterTags) turnDirection = -1;
 
 
         //otherwise turn till tags on both sides of image then drive straight
-        if (left && right) {
+        /*if (left && right) {
             result.cmdVel = searchVelocity;
             result.angleError = 0.0;
         }
@@ -145,9 +145,13 @@ void DropOffController::calculateDecision() {
         {
             result.cmdVel = searchVelocity;
             result.angleError = 0.0;
-        }
+        }*/
 
-        //must see greater than this many tags before assuming we are driving into the center and not along an edge.
+        //just drive forward. dont change dirrection
+        result.cmdVel = searchVelocity;
+        result.angleError = 0.0;
+
+        /*//must see greater than this many tags before assuming we are driving into the center and not along an edge.
         if (count > seenEnoughCenterTagsCount)
         {
             seenEnoughCenterTags = true; //we have driven far enough forward to be in the circle.
@@ -158,8 +162,9 @@ void DropOffController::calculateDecision() {
             timeWithoutSeeingEnoughCenterTags = time(0);
         }
         //time since we dropped below countGuard tags
-        timeElapsedSinceTimeSinceSeeingEnoughCenterTags = time(0) - timeWithoutSeeingEnoughCenterTags;
-
+        timeElapsedSinceTimeSinceSeeingEnoughCenterTags = time(0) - timeWithoutSeeingEnoughCenterTags;*/
+        count = 0;
+        seenEnoughCenterTags = true;
         //we have driven far enough forward to have passed over the circle.
         if (count == 0 && seenEnoughCenterTags && timeElapsedSinceTimeSinceSeeingEnoughCenterTags > 1) {
             centerSeen = false;
@@ -168,9 +173,28 @@ void DropOffController::calculateDecision() {
         prevCount = count;
         count = 0;
     }
+
+    if(centerApproach){
+        timeElapsedSinceTimeSinceSeeingEnoughCenterTags = time(0) - timeWithoutSeeingEnoughCenterTags;
+        if (timeElapsedSinceTimeSinceSeeingEnoughCenterTags > 3) //if enough time passed (3 sec)
+        {
+            //go back to drive to center base location instead of drop off attempt
+            reachedCollectionPoint = true;
+            timerStartTime = time(0);
+            result.goalDriving = false;
+            centerApproach = false;
+            result.timer = true;
+        }
+        else //if not enough passed
+        {   //drive forward
+            result.cmdVel = searchVelocity;
+            result.angleError = 0.0;
+        }
+    }
+
     //was on approach to center and did not seenEnoughCenterTags
     //for maxTimeAllowedWithoutSeeingCenterTags seconds so reset.
-    else if (centerApproach) {
+    /*else if (centerApproach) {
         result.goalDriving = false;
         int maxTimeAllowedWithoutSeeingCenterTags = 6; //seconds
 
@@ -203,7 +227,7 @@ void DropOffController::calculateDecision() {
         result.goalDriving = false;
         centerApproach = false;
         result.timer = true;
-    }
+    }*/
 
     return;
 }

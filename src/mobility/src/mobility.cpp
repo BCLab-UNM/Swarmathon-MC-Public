@@ -310,8 +310,8 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
 
     std_msgs::String stateMachineMsg;
-    float rotateOnlyAngleTolerance = 0.3;
-    int returnToSearchDelay = 5;
+    float rotateOnlyAngleTolerance = 0.4;
+    int returnToSearchDelay = 3; //this is responsible for not letting the rover searchafter cube drop maybe will be able to change it
 
     // calls the averaging function, also responsible for
     // transform from Map frame to odom frame.
@@ -418,9 +418,9 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     //centerLocationOdom = currentLocation;
 
                     dropOffController.reset();
-                    returnAfterDropOffSet = false;
+
                 } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
-                    goalLocation = result.centerGoal;
+                    goalLocation = currentLocation;
                     stateMachineState = STATE_MACHINE_ROTATE;
                     timerStartTime = time(0);
                 }
@@ -428,7 +428,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 else {
                     sendDriveCommand(result.cmdVel,result.angleError);
                     stateMachineState = STATE_MACHINE_TRANSFORM;
-                    goalLocation = currentLocation;
+                    goalLocation = currentLocation; //this location replaces the cube drop location
                     break;
                 }
             }
@@ -446,6 +446,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
                 //if movement stack has interruptions
                 if(!interruptionsStack.isEmpty()){
+                    if(returnAfterDropOffSet){ //return to the location of a picked up cube
+                        goalLocation.x = interruptionsStack.getInterruptedLocation().x;
+                        goalLocation.y = interruptionsStack.getInterruptedLocation().y;
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                        returnAfterDropOffSet = false;
+                        break;
+                    }
                     if(!interruptionsStack.isAtOldGoal()){
                         ROS_INFO("old goal");
                         goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
@@ -547,8 +554,15 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 //if we have not set a goal of return
                 if(!returnAfterDropOffSet){
                     //set the restore point
+                    ROS_INFO("Seting new old location");
                     interruptionsStack.addToStack(currentLocation, currentLocation, goalLocation, goalLocation);
                     returnAfterDropOffSet = true; //set flag to true so that we do not set new goal
+                } else {
+                    //ROS_INFO("Reseting old location");
+                    interruptionsStack.resetInterruptedLocation(currentLocation);
+                    interruptionsStack.unsetOldGoal();
+                    interruptionsStack.unsetLeveled();
+                    interruptionsStack.unsetRestore();
                 }
 
                 result = pickUpController.pickUpSelectedTarget(blockBlock);
@@ -584,7 +598,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     stateMachineState = STATE_MACHINE_ROTATE;
 
                     goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
-
+                    ROS_INFO("Set Center wit htarget");
                     // set center as goal position
                     goalLocation.x = newCenterLocation.x;
                     goalLocation.y = newCenterLocation.y;
@@ -610,7 +624,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         }
         //each robot checks if it is its turn to calibrate
         case STATE_MACHINE_CALIBRATE: {
-            searchVelocity = 0.7;
+            searchVelocity = 0.5;
             hive_srv::calibrate srv;
             srv.request.robotName = publishedName;
             srv.request.calibratedOnCenter = calibratedOnCenter;
@@ -736,7 +750,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
                 targetCounter++;
             } 
         }
-        ROS_INFO("See this many targets: %d", targetCounter);
+        //ROS_INFO("See this many targets: %d", targetCounter);
         targetCounter = 0;
 
 
@@ -809,59 +823,59 @@ void modeHandler(const std_msgs::UInt8::ConstPtr& message) {
 
 void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
     if(calibratedOnCenter){
-        if ((!targetDetected || targetCollected) && (message->data > 0)) {
-            //set the old goal
-            geometry_msgs::Pose2D oldGoal;
-            oldGoal = goalLocation;
-            //set the reset
-            geometry_msgs::Pose2D reset;
-            //in current direction
-            reset.theta = currentLocation.theta;
-            //what will be the coords of half meter offset
-            //double remainingGoalDist = hypot(goalLocation.x - currentLocation.x, goalLocation.y - currentLocation.y);
-
-            reset.x = currentLocation.x + (0.5 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
-            reset.y = currentLocation.y + (0.5 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
-
-
-            // obstacle on right side
-            if (message->data == 1) {
-                // select new heading 0.2 radians to the left
-                goalLocation.theta = currentLocation.theta + M_PI/4;
-            }
-
-            // obstacle in front or on left side
-            else if (message->data == 2) {
-                // select new heading 0.2 radians to the right
-                goalLocation.theta = currentLocation.theta - M_PI/4;
-            }
-
-            // continues an interrupted search
-
-            if(!interruptionsStack.isEmpty()){ //if we have an element in the stack
-                //check if we rotated to the previous interuption before placing a new interuption in the stack
-                //if the angle is below the tolarance that means we rotated and there is still something in front of us
-                if(fabs(angles::shortest_angular_distance(currentLocation.theta, interruptionsStack.getInterruptedLocation().theta)) < 0.1){
-                    goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-                    interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
-                    ROS_INFO("Collision");
-                }
-            } else {
-                ROS_INFO("Collision");
-                goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-                interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
-
-            }
-            // switch to transform state to trigger collision avoidance
-            stateMachineState = STATE_MACHINE_ROTATE;
-            ROS_INFO("Collision");
-            avoidingObstacle = true;
-        }
-
         // the front ultrasond is blocked very closely. 0.14m currently
         if (message->data == 4) {
             blockBlock = true;
         } else {
+            if ((!targetDetected || targetCollected) && (message->data > 0)) {
+                //set the old goal
+                geometry_msgs::Pose2D oldGoal;
+                oldGoal = goalLocation;
+                //set the reset
+                geometry_msgs::Pose2D reset;
+                //in current direction
+                reset.theta = currentLocation.theta;
+                //what will be the coords of half meter offset
+                //double remainingGoalDist = hypot(goalLocation.x - currentLocation.x, goalLocation.y - currentLocation.y);
+
+                reset.x = currentLocation.x + (0.5 * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+                reset.y = currentLocation.y + (0.5 * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
+
+
+                // obstacle on right side
+                if (message->data == 1) {
+                    // select new heading 0.2 radians to the left
+                    goalLocation.theta = currentLocation.theta + M_PI/4;
+                }
+
+                // obstacle in front or on left side
+                else if (message->data == 2) {
+                    // select new heading 0.2 radians to the right
+                    goalLocation.theta = currentLocation.theta - M_PI/4;
+                }
+
+                // continues an interrupted search
+
+                if(!interruptionsStack.isEmpty()){ //if we have an element in the stack
+                    //check if we rotated to the previous interuption before placing a new interuption in the stack
+                    //if the angle is below the tolarance that means we rotated and there is still something in front of us
+                    if(fabs(angles::shortest_angular_distance(currentLocation.theta, interruptionsStack.getInterruptedLocation().theta)) < 0.1){
+                        goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+                        interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+                        ROS_INFO("Collision");
+                    }
+                } else {
+                    ROS_INFO("Collision");
+                    goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+                    interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+
+                }
+                // switch to transform state to trigger collision avoidance
+                stateMachineState = STATE_MACHINE_ROTATE;
+                ROS_INFO("Collision");
+                avoidingObstacle = true;
+
+            }
             blockBlock = false;
         }
     }
