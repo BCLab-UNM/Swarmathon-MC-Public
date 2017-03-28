@@ -53,6 +53,7 @@ void DropOffController::calculateDecision() {
 
         if (timerTimeElapsed >= 4)//drives back this many secs
         {
+            sleep(5);
             result.reset = true; //tell mobility to reset to search parameters
         }
         else if (timerTimeElapsed >= 1)
@@ -185,7 +186,7 @@ void DropOffController::calculateDecision() {
             centerApproach = false;
             result.timer = true;
         }
-        else //if not enough passed
+        else //if not enough passedn fingers
         {   //drive forward
             result.cmdVel = searchVelocity;
             result.angleError = 0.0;

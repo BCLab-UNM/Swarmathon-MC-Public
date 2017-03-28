@@ -74,6 +74,8 @@ geometry_msgs::Pose2D startLocation;
 geometry_msgs::Pose2D interruptedLocation;
 geometry_msgs::Pose2D interruptedLocationFrom; //point from which we got interupted
 
+geometry_msgs::Pose2D moveBackPos;
+
 static int counter;
 int id;
 int currentMode = 0;
@@ -144,6 +146,8 @@ ros::ServiceClient calibrationClient;
 //calibration variable
 bool calibratedOnCenter = false;
 bool calibratedOnStart = false;
+bool droveBack = false;
+
 //position adjusting values. Used to create a new center
 float posAdjustX;
 float posAdjustY;
@@ -154,6 +158,7 @@ float endSearchWidth = 0;
 float levelOut = false;
 //double check of the turn
 bool doubleCheck = false;
+
 
 //DROP AND PICKUP STUFFS
 bool returnAfterDropOffSet = false;
@@ -311,7 +316,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
     std_msgs::String stateMachineMsg;
     float rotateOnlyAngleTolerance = 0.4;
-    int returnToSearchDelay = 3; //this is responsible for not letting the rover searchafter cube drop maybe will be able to change it
+    int returnToSearchDelay = 1; //this is responsible for not letting the rover searchafter cube drop maybe will be able to change it
 
     // calls the averaging function, also responsible for
     // transform from Map frame to odom frame.
@@ -429,6 +434,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     sendDriveCommand(result.cmdVel,result.angleError);
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                     goalLocation = currentLocation; //this location replaces the cube drop location
+                    goalLocation.theta += M_PI;
                     break;
                 }
             }
@@ -633,7 +639,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             srv.request.currLocationY = currentLocation.y;
             if(calibrationClient.call(srv)){
                 if(srv.response.calibrate == true){
-                    sleep(7); //sleep 7 secs to let the other robot start driving away. can set to more
+                    //sleep(7); //sleep 7 secs to let the other robot start driving away. can set to more
                     ROS_INFO("Calibrate: %s", srv.response.calibrate ? "true" : "false");
                     if(!calibratedOnCenter){
                         if(!avoidingObstacle){ //if runing first time with no obsticles
@@ -641,6 +647,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                             goalLocation.x = currentLocation.x + (1.15 * cos(goalLocation.theta));
                             goalLocation.y = currentLocation.y + (1.15 * sin(goalLocation.theta));
                             newCenterLocation = goalLocation; //set the new center location
+                            moveBackPos = currentLocation;
                             stateMachineState = STATE_MACHINE_ROTATE;
                             ROS_INFO("Going to center: %s", publishedName.c_str() ? "true" : "false");
                         } else { //if got an obsticle and recentering
@@ -654,13 +661,34 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
                 } else if (calibratedOnCenter && srv.response.calibrate == false) {
                     //we have calibrated go to transform
-                    searchVelocity = 0.7;
-                    ROS_INFO("Back to transform");
-                    stateMachineState = STATE_MACHINE_TRANSFORM;
-                    break;
+                    //tell the hive that we are calibreted
+                    srv.request.robotName = publishedName;
+                    srv.request.calibratedOnCenter = calibratedOnCenter;
+                    srv.request.calibratedOnStart = calibratedOnStart;
+                    srv.request.currLocationX = currentLocation.x;
+                    srv.request.currLocationY = currentLocation.y;
+                    sendDriveCommand(-1, 0.0); //keep moving back at fastest speed until
+                    //the distance between the starting location and the current is less than 0.1
+                    if(hypot(moveBackPos.x - currentLocation.x, moveBackPos.y - currentLocation.y) <= 0.1){
+                        searchVelocity = 0.7; //set search speed to 0.7
+                        droveBack = true; //set drove back to true so taht we can start recognising targets
+                        ROS_INFO("Back to transform");
+                        stateMachineState = STATE_MACHINE_TRANSFORM;
+                        goalLocation = moveBackPos; //set the goal to moveBackPos (0, 0) so that we came back to the starting position
+                        break;
+                    //or until the distance between the starting location and current is 2.5
+                    //in this case we just didnt stop where we were supposed to because the top if was skipped because the thread was called too late.
+                    } else if(hypot(moveBackPos.x - currentLocation.x, moveBackPos.y - currentLocation.y) >= 2.5){
+                        searchVelocity = 0.7;
+                        droveBack = true;
+                        ROS_INFO("Back to transform");
+                        stateMachineState = STATE_MACHINE_TRANSFORM;
+                        goalLocation = moveBackPos;
+                        break;
+                    }
                 }  else {
                     //dont start calibrating robot yet
-                    //ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
+                    ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
                 }
 
             } else {
@@ -718,7 +746,7 @@ void sendDriveCommand(double linearVel, double angularError)
 void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& message) {
 
     // If in manual mode do not try to automatically pick up the target
-    if(!calibratedOnCenter) return;
+    if(!calibratedOnCenter || !droveBack) return;
 
     if (currentMode == 1 || currentMode == 0) return;
 

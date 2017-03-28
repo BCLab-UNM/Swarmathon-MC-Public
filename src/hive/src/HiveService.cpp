@@ -134,7 +134,13 @@ bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &re
         int robots = robotList.size();
         ROS_INFO("Start %f:, End: %f, ID: %d, RObots: %d ", startSearchWidth, endSearchWidth, id, robots);
     } else {
-
+        float split = (arenaSize/2)/robotList.size(); // find out how to split
+        float startSearchWidth = split * (robotList.size() - id);
+        float endSearchWidth = split * (robotList.size() - (id+1));
+        res.searchStartWidth = startSearchWidth;
+        res.searchEndWidth = endSearchWidth;
+        int robots = robotList.size();
+        ROS_INFO("Start %f:, End: %f, ID: %d, RObots: %d ", startSearchWidth, endSearchWidth, id, robots);
     }
 
     return true;

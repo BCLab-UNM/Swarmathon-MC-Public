@@ -107,8 +107,8 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
        if(setArenaClient.call(srv)){
            startSearchWidth = srv.response.searchStartWidth;
            endSearchWidth = srv.response.searchEndWidth;
-           startSearchWidth = 2;
-           endSearchWidth = 1;
+           //startSearchWidth = 2;
+           //endSearchWidth = 1;
            ROS_INFO("Values are set");
        } else {
            ROS_INFO("Could not call set arena client");
