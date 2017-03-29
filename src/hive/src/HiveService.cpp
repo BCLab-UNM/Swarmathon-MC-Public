@@ -62,7 +62,6 @@ bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Resp
     Robot r(req.robotName, robotCounter);
     res.robotIdInHive = robotCounter;
     robotCounter++;
-    res.robotIdInHive = r.id;
 
 
     robotList.push_back(r);
@@ -93,9 +92,12 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
                 }
             } else {
                 Robot &r = robotList.at(i);
-                r.posAdjustX = req.currLocationX; //set the adjusts if in the center
-                r.posAdjustY = req.currLocationY;
-                r.calibrated = true;
+                if(!r.calibrated){
+                    r.posAdjustX = req.currLocationX; //set the adjusts if in the center
+                    r.posAdjustY = req.currLocationY;
+                    r.calibrated = true;
+                    ROS_INFO("Setting adjustment for: %s, x: %f. y: %f", ((std::string)req.robotName).c_str(), (float)req.currLocationX, (float)req.currLocationY);
+                }
                 return true;
             }
         }

@@ -53,7 +53,6 @@ void DropOffController::calculateDecision() {
 
         if (timerTimeElapsed >= 4)//drives back this many secs
         {
-            sleep(5);
             result.reset = true; //tell mobility to reset to search parameters
         }
         else if (timerTimeElapsed >= 1)

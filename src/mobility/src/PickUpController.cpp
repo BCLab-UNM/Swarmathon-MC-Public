@@ -75,13 +75,13 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
         result.angleError = 0.0;
         timeOut = true;
     }
-    else if (Td > 2.4) //raise the wrist
+    else if (Td > 2.5) //raise the wrist
     {
         result.cmdVel = -0.35;
         result.angleError = 0.0;
         result.wristAngle = 0;
     }
-    else if (Td > 1.7) //close the fingers and drive forward with little speed
+    else if (Td > 1.5) //close the fingers and drive forward with little speed
     {
         result.cmdVel = -0.1;
         result.angleError = 0.0;

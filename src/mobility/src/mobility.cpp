@@ -162,6 +162,14 @@ bool doubleCheck = false;
 
 //DROP AND PICKUP STUFFS
 bool returnAfterDropOffSet = false;
+//recover after the avoid with cube
+bool rocoveringFromAvoid = false;
+//wall collision safeguard
+int cantGetToGoal = 0;
+
+
+//check for cubes in front of target to avoid cubes being stuck in claw
+bool checkForCubesInFront = false;
 
 //counter of the targets. Used to tell the hive if cluster
 int targetCounter = 0;
@@ -383,7 +391,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         // If no adjustment needed, select new goal
         case STATE_MACHINE_TRANSFORM: {
             stateMachineMsg.data = "TRANSFORMING";
-
             // If returning with a target
             if (targetCollected && !avoidingObstacle) {
                 // calculate the euclidean distance between
@@ -397,6 +404,18 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     timerStartTime = time(0);
                     reachedCollectionPoint = true;
                 }
+
+                if(rocoveringFromAvoid){
+                    //have not reached collection point. Set the center
+                    ROS_ERROR("Setting center");
+                    goalLocation.x = newCenterLocation.x;
+                    goalLocation.y = newCenterLocation.y;
+                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                    stateMachineState = STATE_MACHINE_ROTATE;
+                    rocoveringFromAvoid = false;
+                    break;
+                }
+
 
                 std_msgs::Float32 angle;
 
@@ -446,6 +465,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //If goal has not yet been reached drive and maintane heading
             else if (fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x))) < M_PI_2) {
                 stateMachineState = STATE_MACHINE_SKID_STEER;
+
             }
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
@@ -465,6 +485,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
                         goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
                         interruptionsStack.setOldGoal();
+                        cantGetToGoal++;
                     } else if(!interruptionsStack.isLeveled()){
                         ROS_INFO("level");
                         goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
@@ -474,6 +495,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     } else {
                         goalLocation.theta = interruptionsStack.getGoalOfInterruption().theta;
                         interruptionsStack.popStack();
+                        cantGetToGoal = 0;
                     }
 
                 } else {
@@ -498,6 +520,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 // rotate but dont drive  0.05 is to prevent turning in reverse
                 sendDriveCommand(0.05, errorYaw);
                 //sendDriveCommand(0, errorYaw);
+
                 break;
             } else {
                 stateMachineState = STATE_MACHINE_SKID_STEER;
@@ -529,13 +552,25 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                 if(!calibratedOnCenter){
                     if(fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x))) > M_PI_2){
-                        ROS_INFO("Calibrated Center");
+                        //ROS_INFO("Calibrated Center");
                         //if center has been reached
                         calibratedOnCenter = true;
                         calibratedOnStart = true;
                         posAdjustX = currentLocation.x;
                         posAdjustY = currentLocation.y;
                         newCenterLocation = currentLocation;
+                        hive_srv::calibrate srv;
+                        srv.request.robotName = publishedName;
+                        srv.request.calibratedOnCenter = calibratedOnCenter;
+                        srv.request.calibratedOnStart = calibratedOnStart;
+                        srv.request.currLocationX = currentLocation.x;
+                        srv.request.currLocationY = currentLocation.y;
+                        if(calibrationClient.call(srv)){
+                            ROS_INFO("Calibration good");
+                        } else {
+                             ROS_INFO("Calibration not good");
+                        }
+
                     }
                     stateMachineState = STATE_MACHINE_CALIBRATE;
                     break;
@@ -560,16 +595,16 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 //if we have not set a goal of return
                 if(!returnAfterDropOffSet){
                     //set the restore point
-                    ROS_INFO("Seting new old location");
                     interruptionsStack.addToStack(currentLocation, currentLocation, goalLocation, goalLocation);
                     returnAfterDropOffSet = true; //set flag to true so that we do not set new goal
                 } else {
-                    //ROS_INFO("Reseting old location");
                     interruptionsStack.resetInterruptedLocation(currentLocation);
                     interruptionsStack.unsetOldGoal();
                     interruptionsStack.unsetLeveled();
                     interruptionsStack.unsetRestore();
                 }
+
+
 
                 result = pickUpController.pickUpSelectedTarget(blockBlock);
                 sendDriveCommand(result.cmdVel,result.angleError);
@@ -630,6 +665,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         }
         //each robot checks if it is its turn to calibrate
         case STATE_MACHINE_CALIBRATE: {
+            //ROS_INFO("Calibrating");
             searchVelocity = 0.5;
             hive_srv::calibrate srv;
             srv.request.robotName = publishedName;
@@ -640,39 +676,35 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             if(calibrationClient.call(srv)){
                 if(srv.response.calibrate == true){
                     //sleep(7); //sleep 7 secs to let the other robot start driving away. can set to more
-                    ROS_INFO("Calibrate: %s", srv.response.calibrate ? "true" : "false");
+                    //ROS_INFO("Calibrate: %s", srv.response.calibrate ? "true" : "false");
                     if(!calibratedOnCenter){
-                        if(!avoidingObstacle){ //if runing first time with no obsticles
-                            goalLocation.theta = currentLocation.theta;
+                        goalLocation.theta = currentLocation.theta;
+                        ROS_INFO("Theta is: %f", ((float)(currentLocation.theta))*10);
+                        if((int)(((float)(currentLocation.theta))*10) == 7 || (int)(((float)(currentLocation.theta))*10) == -23
+                                || (int)(((float)(currentLocation.theta))*10) == 23 || (int)(((float)(currentLocation.theta))*10) == 7){
+                            ROS_INFO("Rover 5 and 6");
+                            goalLocation.x = currentLocation.x + (1.35 * cos(goalLocation.theta));
+                            goalLocation.y = currentLocation.y + (1.35 * sin(goalLocation.theta));
+                        } else {
                             goalLocation.x = currentLocation.x + (1.15 * cos(goalLocation.theta));
                             goalLocation.y = currentLocation.y + (1.15 * sin(goalLocation.theta));
-                            newCenterLocation = goalLocation; //set the new center location
-                            moveBackPos = currentLocation;
-                            stateMachineState = STATE_MACHINE_ROTATE;
-                            ROS_INFO("Going to center: %s", publishedName.c_str() ? "true" : "false");
-                        } else { //if got an obsticle and recentering
-                            goalLocation.x = newCenterLocation.x;
-                            goalLocation.y = newCenterLocation.y;
-                            goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
-                            ROS_INFO("Going to center after interuption: %s", publishedName.c_str() ? "true" : "false");
-                            stateMachineState = STATE_MACHINE_ROTATE;
                         }
+                        newCenterLocation = goalLocation; //set the new center location
+                        moveBackPos = currentLocation;
+                        stateMachineState = STATE_MACHINE_ROTATE;
+                        //ROS_INFO("Going to center: %s", publishedName.c_str() ? "true" : "false");
+
                         break;
                     }
                 } else if (calibratedOnCenter && srv.response.calibrate == false) {
                     //we have calibrated go to transform
                     //tell the hive that we are calibreted
-                    srv.request.robotName = publishedName;
-                    srv.request.calibratedOnCenter = calibratedOnCenter;
-                    srv.request.calibratedOnStart = calibratedOnStart;
-                    srv.request.currLocationX = currentLocation.x;
-                    srv.request.currLocationY = currentLocation.y;
                     sendDriveCommand(-1, 0.0); //keep moving back at fastest speed until
                     //the distance between the starting location and the current is less than 0.1
-                    if(hypot(moveBackPos.x - currentLocation.x, moveBackPos.y - currentLocation.y) <= 0.1){
+                    if(hypot(moveBackPos.x - currentLocation.x, moveBackPos.y - currentLocation.y) <= 0.3){
                         searchVelocity = 0.7; //set search speed to 0.7
+                        //ROS_INFO("Back to transform");
                         droveBack = true; //set drove back to true so taht we can start recognising targets
-                        ROS_INFO("Back to transform");
                         stateMachineState = STATE_MACHINE_TRANSFORM;
                         goalLocation = moveBackPos; //set the goal to moveBackPos (0, 0) so that we came back to the starting position
                         break;
@@ -681,14 +713,14 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     } else if(hypot(moveBackPos.x - currentLocation.x, moveBackPos.y - currentLocation.y) >= 2.5){
                         searchVelocity = 0.7;
                         droveBack = true;
-                        ROS_INFO("Back to transform");
+                        //ROS_INFO("Back to transform");
                         stateMachineState = STATE_MACHINE_TRANSFORM;
                         goalLocation = moveBackPos;
                         break;
                     }
                 }  else {
                     //dont start calibrating robot yet
-                    ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
+                    //ROS_INFO("Dont calibrate: %s", srv.response.calibrate ? "true" : "false");
                 }
 
             } else {
@@ -850,7 +882,7 @@ void modeHandler(const std_msgs::UInt8::ConstPtr& message) {
 }
 
 void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
-    if(calibratedOnCenter){
+    if(calibratedOnCenter && droveBack){
         // the front ultrasond is blocked very closely. 0.14m currently
         if (message->data == 4) {
             blockBlock = true;
@@ -885,26 +917,30 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
                 // continues an interrupted search
 
                 if(!interruptionsStack.isEmpty()){ //if we have an element in the stack
-                    //check if we rotated to the previous interuption before placing a new interuption in the stack
-                    //if the angle is below the tolarance that means we rotated and there is still something in front of us
-                    if(fabs(angles::shortest_angular_distance(currentLocation.theta, interruptionsStack.getInterruptedLocation().theta)) < 0.1){
-                        goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-                        interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
-                        ROS_INFO("Collision");
+                    goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
+                    ROS_INFO("Collision with angle offset");
+                    if(cantGetToGoal >= 4){
+                        ROS_INFO("Setting new goal");
+                        interruptionsStack.resetGoalOfInterruption(goalLocation);
                     }
+
                 } else {
-                    ROS_INFO("Collision");
+                    ROS_INFO("Collision first elements");
                     goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
                     interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
 
                 }
                 // switch to transform state to trigger collision avoidance
                 stateMachineState = STATE_MACHINE_ROTATE;
-                ROS_INFO("Collision");
+                //ROS_INFO("Collision");
+                if(targetCollected)
+                    rocoveringFromAvoid = true;
+
                 avoidingObstacle = true;
 
             }
             blockBlock = false;
+            return;
         }
     }
 }

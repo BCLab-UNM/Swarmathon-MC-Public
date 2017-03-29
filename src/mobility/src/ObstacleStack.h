@@ -60,6 +60,11 @@ public:
         this->interruptStack.push(location);
     }
 
+    void resetGoalOfInterruption(geometry_msgs::Pose2D location){
+        this->goalOfInterruption.pop();
+        this->goalOfInterruption.push(location);
+    }
+
 
 
 };
