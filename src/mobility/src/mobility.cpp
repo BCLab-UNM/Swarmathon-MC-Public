@@ -6,6 +6,7 @@
 #include "hive_srv/calibrate.h"
 #include "hive_srv/askReturnPermission.h"
 #include "hive_srv/foundCluster.h"
+#include "hive_srv/getHeading.h"
 
 //include ObstacleStack
 #include "ObstacleStack.h"
@@ -78,6 +79,8 @@ geometry_msgs::Pose2D interruptedLocationFrom; //point from which we got interup
 
 geometry_msgs::Pose2D moveBackPos;
 
+geometry_msgs::Pose2D clusterLocation;
+
 static int counter;
 int id;
 int currentMode = 0;
@@ -147,6 +150,7 @@ ros::ServiceClient addRobotClient;
 ros::ServiceClient calibrationClient;
 ros::ServiceClient askReturnPermission;
 ros::ServiceClient foundCluster;
+ros::ServiceClient getHeading;
 
 //calibration variable
 bool calibratedOnCenter = false;
@@ -186,6 +190,7 @@ bool checkForCubesInFront = false;
 //counter of the targets. Used to tell the hive if cluster
 int targetCounter = 0;
 bool stopCount = false;
+bool headingIsSet = false;
 
 //all the obstacles that piled up that will be processed to return us to our path basically
 ObstacleStack interruptionsStack;
@@ -320,6 +325,7 @@ int main(int argc, char **argv) {
     calibrationClient = mNH.serviceClient<hive_srv::calibrate>("calibration");
     askReturnPermission = mNH.serviceClient<hive_srv::askReturnPermission>("ask_return_permission");
     foundCluster = mNH.serviceClient<hive_srv::foundCluster>("notify_about_cluster");
+    getHeading = mNH.serviceClient<hive_srv::getHeading>("get_heading");
 
 
     ros::spin();
@@ -468,6 +474,20 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                          ROS_INFO("Ask Permission server failed to call");
                     }
 
+                    //call the heading service
+                    hive_srv::getHeading srv2;
+                    srv2.request.robotName = publishedName;
+                    srv2.request.posX = currentLocation.x;
+                    srv2.request.posY = currentLocation.y;
+                    if(getHeading.call(srv2)){
+                        if(((bool)srv2.response.headingIsSet)){
+                            clusterLocation.x = ((float)srv2.response.headingX);
+                            clusterLocation.y = ((float)srv2.response.headingY);
+                            headingIsSet = true;
+                        }
+                    } else {
+                        ROS_INFO("Failed to get heading from server");
+                    }
                 } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
                     goalLocation = currentLocation;
                     stateMachineState = STATE_MACHINE_ROTATE;
@@ -497,7 +517,12 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
                 //if movement stack has interruptions
-                if(!interruptionsStack.isEmpty()){
+                if(headingIsSet){
+                    stateMachineState = STATE_MACHINE_HEADING;
+                    break;
+                }
+
+                else if(!interruptionsStack.isEmpty()){
                     if(returnAfterDropOffSet){ //return to the location of a picked up cube
                         goalLocation.x = interruptionsStack.getInterruptedLocation().x;
                         goalLocation.y = interruptionsStack.getInterruptedLocation().y;
@@ -611,6 +636,8 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                 }
                 avoidingObstacle = false;
+
+
             }
 
             break;
@@ -804,6 +831,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 atReady = false;
                 dropPos = false;
                 readyPos = false;
+
             } else { //if cant drop
                 if(readyPos){ //maybe can get ready
                     //calculate ready position. 1 metters from base.
@@ -857,7 +885,12 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 }
             }
 
+        } case STATE_MACHINE_HEADING:{
+            //ROS_INFO("Going to heading");
+            //stateMachineState = STATE_MACHINE_TRANSFORM;
+            headingIsSet = false;
         }
+
 
         default: {
             break;

@@ -39,6 +39,7 @@ using namespace std;
 #include "hive_srv/setArena.h"
 #include "hive_srv/askReturnPermission.h"
 #include "hive_srv/foundCluster.h"
+#include "hive_srv/getHeading.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -95,9 +96,21 @@ bool notifyAboutCluster(hive_srv::foundCluster::Request &req, hive_srv::foundClu
 
     //if for loop didnt have any clusters or the cluster found is a diferent location
     //create a new cluster
-    Cluster c((string)req.robotName, (float)req.posX, (float)req.posY, robotList.size());
+    //fid the robot in the robot list to get his offset
+    float x = 0; //x adjust
+    float y = 0; //y adjust
+    for(int i = 0; i<robotList.size(); i++){
+        //if the name is equal
+        if(((Robot)robotList[i]).name == ((string)req.robotName)){
+            x = ((Robot)robotList[i]).posAdjustX;
+            y = ((Robot)robotList[i]).posAdjustY;
+            break;
+        }
+    }
+    //put an adjusted position cluster in list
+    Cluster c((string)req.robotName, ((float)req.posX)-x, ((float)req.posY)-y, robotList.size());
     clusterList.push_back(c);
-    ROS_INFO("Added new cluster");
+    ROS_INFO("#############Added new cluster pos X:%f, Y:%f", ((float)req.posX)-x, ((float)req.posY)-y);
     return true;
 }
 
@@ -254,6 +267,47 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
     return true;
 }
 
+bool getHeading(hive_srv::getHeading::Request &req, hive_srv::getHeading::Response &res){
+    if(clusterList.empty()){
+        res.headingIsSet = false;
+        ROS_INFO("There is no heading yet. Go do what you were doing looser");
+        return true;
+    } else {
+        int shortesIndex = 0;
+        float shortestDistance = 1000000000; //set big distance so that first element will deff have shorter distance
+        //go through the list
+        for(int i = 0; i<clusterList.size(); i++){
+            //find shortest distance heading
+            double distance = fabs(hypot(((Cluster)clusterList[i]).clusterX - ((float)req.posX), ((Cluster)clusterList[i]).clusterY - ((float)req.posY)));
+            if(distance < shortestDistance){
+                shortesIndex = i;
+            }
+        }
+
+        //find position adjust for the robot that is requesting
+        float x = 0; //x adjust
+        float y = 0; //y adjust
+        for(int i = 0; i<robotList.size(); i++){
+            //if the name is equal
+            if(((Robot)robotList[i]).name == ((string)req.robotName)){
+                x = ((Robot)robotList[i]).posAdjustX;
+                y = ((Robot)robotList[i]).posAdjustY;
+                break;
+            }
+        }
+
+        res.headingX = ((Cluster)clusterList[shortesIndex]).clusterX + x;
+        res.headingY = ((Cluster)clusterList[shortesIndex]).clusterY + y;
+        res.headingIsSet = true;
+        ROS_INFO("#############Sending to cluster at X:%f, Y:%f", ((float)res.headingX), ((float)res.headingY));
+        Cluster &c = clusterList[shortesIndex];
+        c.assignRobot(((string)req.robotName));
+    }
+
+
+    return true;
+}
+
 
 int main(int argc, char **argv){
     ros::init(argc, argv, "hive_server"); //initialize the server (not really important to know what it does)
@@ -274,6 +328,8 @@ int main(int argc, char **argv){
     ros::ServiceServer s5 = n.advertiseService("get_pos_adjust", getPosAdjust);
 
     ros::ServiceServer s6 = n.advertiseService("ask_return_permission", askReturnPermission);
+
+    ros::ServiceServer s7 = n.advertiseService("get_heading", getHeading);
 
 
     ROS_INFO("Ready to hive bitchez.");
