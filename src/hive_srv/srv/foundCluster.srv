@@ -1,0 +1,6 @@
+string robotName
+float32 posX
+float32 posY
+int32 targetCount
+---
+bool isRegistered

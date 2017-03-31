@@ -1,5 +1,5 @@
-#ifndef __ROBOT_H_INCLUDED__   // if x.h hasn't been included yet...
-#define __ROBOT_H_INCLUDED__   //   #define this so the compiler knows it has been included
+#ifndef __CLUSTER_H_INCLUDED__   // if x.h hasn't been included yet...
+#define __CLUSTER_H_INCLUDED__   //   #define this so the compiler knows it has been included
 
 #include<string>
 #include<vector>

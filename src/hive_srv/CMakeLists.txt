@@ -14,6 +14,8 @@ add_service_files(
   setArena.srv
   getPosAdjust.srv
   askReturnPermission.srv
+  foundCluster.srv
+  getHeading.srv
 
 )
 

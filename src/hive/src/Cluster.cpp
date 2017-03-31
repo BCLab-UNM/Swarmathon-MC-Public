@@ -23,7 +23,8 @@ void Cluster::addConfirm(){
     if(confirmCount % numberOfRobots == 0){
         //add more robots if we can
         if((int)(confirmCount/numberOfRobots) - numberOfRobots <= notConfirmCount){
-            maxRobotsAssigned++;
+            if(maxRobotsAssigned < numberOfRobots)
+                maxRobotsAssigned++;
             ROS_INFO("Adding confirm. Confirm count is: %d, numbers of robots is %d:", confirmCount, maxRobotsAssigned);
         }
 

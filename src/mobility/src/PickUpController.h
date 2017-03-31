@@ -12,6 +12,7 @@ struct PickUpResult {
   float wristAngle;
   bool pickedUp;
   bool giveUp;
+  bool reverseCheck;
 };
 
 class PickUpController

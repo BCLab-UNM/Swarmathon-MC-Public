@@ -14,6 +14,8 @@ PickUpController::PickUpController() {
     result.fingerAngle = -1;
     result.wristAngle = -1;
     result.giveUp = false;
+    result.reverseCheck = false;
+
 
 }
 
@@ -74,6 +76,7 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
         result.cmdVel = 0.25;
         result.angleError = 0.0;
         timeOut = true;
+
     }
     else if (Td > 2.7) //raise the wrist
     {
@@ -98,7 +101,7 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
         else //recover begin looking for targets again
         {
             lockTarget = false;
-            result.cmdVel = -0.15;
+            result.cmdVel = -0.25;
             result.angleError = 0.0;
             //set gripper
             result.fingerAngle = M_PI_2;

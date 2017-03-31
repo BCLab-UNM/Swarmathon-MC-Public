@@ -1,0 +1,7 @@
+string robotName
+float32 posX
+float32 posY
+---
+bool headingIsSet
+float32 headingX
+float32 headingY

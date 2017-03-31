@@ -27,6 +27,7 @@
 #include<string>
 #include <angles/angles.h>
 #include"Robot.h"
+#include"Cluster.h"
 
 using namespace std;
 
@@ -37,6 +38,7 @@ using namespace std;
 #include "hive_srv/getPosAdjust.h"
 #include "hive_srv/setArena.h"
 #include "hive_srv/askReturnPermission.h"
+#include "hive_srv/foundCluster.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -48,18 +50,55 @@ bool positionAdjusted = false;
 //return que
 deque <string> returnQ;
 
+//cluster list
+vector<Cluster> clusterList;
 
 /*
  * call back method for the service. req contains the request fields that
  * were specified in the .srv file. res contains fields that were specified
  * in the .srv file
 */
-bool add(hive_srv::hiveSrv::Request &req, hive_srv::hiveSrv::Response &res){
-    res.sum = req.numA + req.numB; //pulls two numbers from request and adds them to sum field in responce
-    ROS_INFO("request: x=%ld, y=%ld", (long int)req.numA, (long int)req.numB);
-    ROS_INFO("sending back response: [%ld]", (long int)res.sum);
-    ROS_INFO("Vector capacity: [%d]", (int)robotList.size());
-    return true; //return true if service had a success
+bool notifyAboutCluster(hive_srv::foundCluster::Request &req, hive_srv::foundCluster::Response &res){
+    //go through the list of clusters
+    for(int i = 0; i<clusterList.size(); i++){
+        float existingClusterMinX = ((Cluster)clusterList[i]).clusterX - 1;
+        float existingClusterMaxX = ((Cluster)clusterList[i]).clusterX + 1;
+
+        float existingClusterMinY = ((Cluster)clusterList[i]).clusterY - 1;
+        float existingClusterMaxY = ((Cluster)clusterList[i]).clusterY + 1;
+
+        //check if x is one meter away from the cluster
+        if(((float)req.posX) >= existingClusterMinX && ((float)req.posX) <= existingClusterMaxX){
+            //if it is one meter away
+            //check of y is one away
+            if(((float)req.posY) >= existingClusterMinY && ((float)req.posY) <= existingClusterMaxY){
+                //if it is then cluster is the same as in the list.
+                Cluster & c = clusterList[i];
+                if(req.targetCount>=6){
+                    //increase confirm count in list
+                    ROS_INFO("Added confirm to cluster");
+                    c.addConfirm();
+                    return true;
+                } else { //if didnt see enough targets while pick up and we are close to cluster
+                    //increase not confirm.
+                    c.addUnconfirm();
+                    if(c.maxRobotsAssigned == 0){ //if cluster is useless
+                        //kick it out of the house
+                        clusterList.erase(clusterList.begin() + i);
+                        ROS_INFO("Erasing useless cluster");
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    //if for loop didnt have any clusters or the cluster found is a diferent location
+    //create a new cluster
+    Cluster c((string)req.robotName, (float)req.posX, (float)req.posY, robotList.size());
+    clusterList.push_back(c);
+    ROS_INFO("Added new cluster");
+    return true;
 }
 
 bool addRobot(hive_srv::hiveAddRobot::Request &req, hive_srv::hiveAddRobot::Response &res){
@@ -201,7 +240,7 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
             for(int i = 0; i< returnQ.size(); i++){
                 if((string)(returnQ[i]) == (string)(req.robotName)){
                     //if in que just tell it to go to ready
-                    ROS_INFO("Robot is not first but in que. Dont drop but be ready");
+                    //ROS_INFO("Robot is not first but in que. Dont drop but be ready");
                     res.goDropOff = false;
                     res.goToReadyPos = true;
                     return true;
@@ -221,8 +260,10 @@ int main(int argc, char **argv){
     ros::NodeHandle n; //create a node handle
 
     //using the node handle add a new service. The parameters are the name(important) and callback method
-    //Use this name to call the service "hive_service_add" (basically will call the add mnethod)
-    ros::ServiceServer s1 = n.advertiseService("hive_service_add", add);
+    //Use this name to call the service
+
+    //tell the herver that there is a cluster
+    ros::ServiceServer s1 = n.advertiseService("notify_about_cluster", notifyAboutCluster);
     //have to have a ServiceServer even though never used
     ros::ServiceServer s2 = n.advertiseService("hive_add_robot", addRobot);
     //calibration service
@@ -233,6 +274,7 @@ int main(int argc, char **argv){
     ros::ServiceServer s5 = n.advertiseService("get_pos_adjust", getPosAdjust);
 
     ros::ServiceServer s6 = n.advertiseService("ask_return_permission", askReturnPermission);
+
 
     ROS_INFO("Ready to hive bitchez.");
 
