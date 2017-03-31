@@ -4,6 +4,7 @@
 #include "hive_srv//hiveSrv.h"
 #include "hive_srv//hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
+#include "hive_srv/askReturnPermission.h"
 
 //include ObstacleStack
 #include "ObstacleStack.h"
@@ -129,7 +130,7 @@ std_msgs::String msg;
 #define STATE_MACHINE_SKID_STEER 2
 #define STATE_MACHINE_PICKUP 3
 #define STATE_MACHINE_DROPOFF 4
-#define STATE_MACHINE_STARTING_POSITION 5
+#define STATE_MACHINE_ASK_FOR_DROP 5
 #define STATE_MACHINE_CALIBRATE 6
 
 int stateMachineState = STATE_MACHINE_CALIBRATE;
@@ -142,6 +143,7 @@ char prev_state_machine[128];
 //Servers
 ros::ServiceClient addRobotClient;
 ros::ServiceClient calibrationClient;
+ros::ServiceClient askReturnPermission;
 
 //calibration variable
 bool calibratedOnCenter = false;
@@ -158,6 +160,13 @@ float endSearchWidth = 0;
 float levelOut = false;
 //double check of the turn
 bool doubleCheck = false;
+// storing the original theta
+double oTheta;
+
+//variables used for que
+bool readyPos = false;
+bool dropPos = false;
+bool atReady = false;
 
 
 //DROP AND PICKUP STUFFS
@@ -305,6 +314,7 @@ int main(int argc, char **argv) {
     //create clients
     addRobotClient = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
     calibrationClient = mNH.serviceClient<hive_srv::calibrate>("calibration");
+    askReturnPermission = mNH.serviceClient<hive_srv::askReturnPermission>("ask_return_permission");
 
 
 
@@ -355,6 +365,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 //send robot name to hive
                 hive_srv::hiveAddRobot srv;
                 srv.request.robotName = publishedName;
+                oTheta = currentLocation.theta;
                 srv.request.currTheta = currentLocation.theta;
                 if(addRobotClient.call(srv)){
                     ROS_INFO("All good");
@@ -443,6 +454,16 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                     dropOffController.reset();
 
+                    //set drop flag for front rover so others can calibrate.
+                    hive_srv::askReturnPermission srv;
+                    srv.request.droppedOff = true;
+                    srv.request.robotName = publishedName;
+                    if(askReturnPermission.call(srv)){
+                        ROS_INFO("Set drop off flag in server");
+                    } else {
+                         ROS_INFO("Ask Permission server failed to call");
+                    }
+
                 } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
                     goalLocation = currentLocation;
                     stateMachineState = STATE_MACHINE_ROTATE;
@@ -454,6 +475,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                     goalLocation = currentLocation; //this location replaces the cube drop location
                     goalLocation.theta += M_PI;
+
                     break;
                 }
             }
@@ -499,7 +521,8 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
 
                 } else {
-                   goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation);
+                    // added another parameter, original theta
+                   goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation, oTheta);
                 }
             }
 
@@ -576,8 +599,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     break;
                 }
 
-                //move back to transform step
-                stateMachineState = STATE_MACHINE_TRANSFORM;
+                if(readyPos && dropPos){
+                    stateMachineState = STATE_MACHINE_ASK_FOR_DROP;
+                    atReady = false;
+                } else {
+                    //move back to transform step
+                    stateMachineState = STATE_MACHINE_TRANSFORM;
+                }
                 avoidingObstacle = false;
             }
 
@@ -636,7 +664,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     // assume target has been picked up by gripper
                     targetCollected = true;
                     result.pickedUp = false;
-                    stateMachineState = STATE_MACHINE_ROTATE;
+                    stateMachineState = STATE_MACHINE_ASK_FOR_DROP;
 
                     goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
                     ROS_INFO("Set Center wit htarget");
@@ -730,8 +758,80 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             break;
         }
         //if calibration is done, move to starting positioin
-        case STATE_MACHINE_STARTING_POSITION: {
-            ROS_INFO("Waiting for next step: %s", publishedName.c_str());
+        case STATE_MACHINE_ASK_FOR_DROP: {
+            hive_srv::askReturnPermission srv;
+            srv.request.droppedOff = false;
+            srv.request.robotName = publishedName;
+            if(askReturnPermission.call(srv)){
+                readyPos = srv.response.goToReadyPos;
+                dropPos = srv.response.goDropOff;
+                //ROS_INFO("aSKING aSKING ASKING");
+            } else {
+                 //ROS_INFO("Ask Permission server failed to call");
+            }
+
+            if(dropPos){
+                ROS_INFO("Dropping");
+                goalLocation.x = newCenterLocation.x;
+                goalLocation.y = newCenterLocation.y;
+                goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
+                stateMachineState = STATE_MACHINE_ROTATE;
+                atReady = false;
+                dropPos = false;
+                readyPos = false;
+            } else { //if cant drop
+                if(readyPos){ //maybe can get ready
+                    //calculate ready position. 1 metters from base.
+                    if(!atReady){ //if already go to ready position. dong go again. Stops them from circling around like idiots
+                        ROS_INFO("Go To ready");
+                        geometry_msgs::Pose2D readyLocation;
+                        //calculate theta to ready loc
+                        readyLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
+                        readyLocation.theta = readyLocation.theta + M_PI; // ready location turned 180 degrees
+                        readyLocation.x = newCenterLocation.x + (1.5 * cos(readyLocation.theta)); //calculate where x and y will be in that dirrection
+                        readyLocation.y = newCenterLocation.y + (1.5 * sin(readyLocation.theta));
+
+                        //go to ready location
+                        goalLocation.x = readyLocation.x;
+                        goalLocation.y = readyLocation.y;
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                        atReady = true;
+                    }
+
+                        float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
+
+                        // If angle > 0.4 radians rotate but dont drive forward.
+                        if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
+                            // rotate but dont drive  0.05 is to prevent turning in reverse
+                            sendDriveCommand(0.05, errorYaw);
+                            //sendDriveCommand(0, errorYaw);
+                            break;
+                        } else {
+                            float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
+
+                            // goal not yet reached drive while maintaining proper heading.
+                            if (fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x))) < M_PI_2) {
+                                // drive and turn simultaniously
+                                sendDriveCommand(searchVelocity, errorYaw/2);
+                            }
+                            // goal is reached but desired heading is still wrong turn only
+                            else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
+                                 // rotate but dont drive
+                                sendDriveCommand(0.0, errorYaw);
+                            }
+                            else {
+                                // stop
+                                sendDriveCommand(0.0, 0.0);
+                                //move back to transform step
+                                avoidingObstacle = false;
+                            }
+                            break;
+                        }
+
+
+                }
+            }
+
         }
 
         default: {
@@ -823,7 +923,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
         // if we see the center and we dont have a target collected
         if (centerSeen && !targetCollected) {
-                /*float centeringTurn = 0.15; //radians
+                /*float centeringTurn = M_PI/2; //radians
                 stateMachineState = STATE_MACHINE_TRANSFORM;
 
                 // this code keeps the robot from driving over
@@ -843,8 +943,6 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
                 targetDetected = false;
                 pickUpController.reset();*/
-
-
 
             return;
         }
@@ -937,6 +1035,10 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
                     rocoveringFromAvoid = true;
 
                 avoidingObstacle = true;
+                if(readyPos){
+                    atReady = false;
+                }
+
 
             }
             blockBlock = false;

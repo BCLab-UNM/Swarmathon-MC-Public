@@ -31,7 +31,7 @@ DropOffController::DropOffController() {
     circularCenterSearching = false;
     prevCount = 0;
 
-    searchVelocity = 0.15;
+    searchVelocity = 0.25;
 }
 
 
@@ -55,7 +55,7 @@ void DropOffController::calculateDecision() {
         {
             result.reset = true; //tell mobility to reset to search parameters
         }
-        else if (timerTimeElapsed >= 1)
+        else if (timerTimeElapsed >= 0.8)
         {
             //open fingers
             float angle;

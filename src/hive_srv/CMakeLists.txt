@@ -13,6 +13,8 @@ add_service_files(
   calibrate.srv
   setArena.srv
   getPosAdjust.srv
+  askReturnPermission.srv
+
 )
 
 ## Generate added messages and services with any dependencies listed here

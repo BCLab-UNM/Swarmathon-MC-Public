@@ -23,6 +23,7 @@
 
 //operation necessary includes
 #include<vector>
+#include<deque>
 #include<string>
 #include <angles/angles.h>
 #include"Robot.h"
@@ -33,8 +34,9 @@ using namespace std;
 #include "hive_srv/hiveSrv.h"
 #include "hive_srv/hiveAddRobot.h"
 #include "hive_srv/calibrate.h"
-#include "hive_srv/setArena.h"
 #include "hive_srv/getPosAdjust.h"
+#include "hive_srv/setArena.h"
+#include "hive_srv/askReturnPermission.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -43,6 +45,8 @@ int robotCounter = 0;
 //position adjusts
 bool positionAdjusted = false;
 
+//return que
+deque <string> returnQ;
 
 
 /*
@@ -107,6 +111,7 @@ bool calibration(hive_srv::calibrate::Request &req, hive_srv::calibrate::Respons
 
 bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &res){
     string name = req.robotName;
+    float startSearchWidth;
     int id = 0;
     float arenaSize = 15;
     for(int i = 0; i<robotList.size(); i++){
@@ -120,16 +125,20 @@ bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &re
     //find out arena size
     if(robotList.size() <= 4){ //if arena has 3 robots
         arenaSize = 15;
-    } else if(robotList.size() == 6){ //if arena has 6 robots
+        //res.prelim = true;
+    } else if(robotList.size() >= 5){ //if arena has 6 robots
         arenaSize = 22;
+        //res.prelim = false;
     }
 
     //find half the arena
-    arenaSize = arenaSize - 3; //subtract two meters because nothing there
+    arenaSize = arenaSize - 3; // Shrinking the arena size because no cubes are lined up along the edge
     if(robotList.size() <= 4){
+
         //split arena in 3
+
         float split = (arenaSize/2)/robotList.size(); // find out how to split
-        float startSearchWidth = split * (robotList.size() - id);
+        startSearchWidth = split * (robotList.size() - id);
         float endSearchWidth = split * (robotList.size() - (id+1));
         res.searchStartWidth = startSearchWidth;
         res.searchEndWidth = endSearchWidth;
@@ -163,6 +172,49 @@ bool getPosAdjust(hive_srv::getPosAdjust::Request &req, hive_srv::getPosAdjust::
     return true;
 }
 
+bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::askReturnPermission::Response &res){
+    //first check if all the robots are calibrated. If not nobody can return
+    for(int i = 0; i<robotList.size(); i++){
+        if(!((Robot)robotList[i]).calibrated){ //if we found at least one robot not calibrated
+            res.goDropOff = false;
+            res.goToReadyPos = false;
+            return true;
+        }
+    }
+
+    //if all robots are calibrated then see if return que is emty
+    if(returnQ.empty()){
+        ROS_INFO("Putting in que");
+        //tell the robot to go drop off
+        res.goToReadyPos = true;
+        res.goDropOff = false;
+        returnQ.push_back((string)(req.robotName));
+    } else {
+        //check if requested name matches the next robot in que
+        if((string)(returnQ.front()) == (string)(req.robotName)){
+            ROS_INFO("Robot is first. Go Drop");
+            res.goDropOff = true;
+            if((bool)(req.droppedOff))
+                returnQ.pop_front();
+        } else {
+            //check if robot is in the que
+            for(int i = 0; i< returnQ.size(); i++){
+                if((string)(returnQ[i]) == (string)(req.robotName)){
+                    //if in que just tell it to go to ready
+                    ROS_INFO("Robot is not first but in que. Dont drop but be ready");
+                    res.goDropOff = false;
+                    res.goToReadyPos = true;
+                    return true;
+                }
+            }
+            res.goDropOff = false;
+            res.goToReadyPos = true;
+            returnQ.push_back((string)(req.robotName));
+        }
+    }
+    return true;
+}
+
 
 int main(int argc, char **argv){
     ros::init(argc, argv, "hive_server"); //initialize the server (not really important to know what it does)
@@ -180,7 +232,9 @@ int main(int argc, char **argv){
 
     ros::ServiceServer s5 = n.advertiseService("get_pos_adjust", getPosAdjust);
 
-    ROS_INFO("Ready to add two ints.");
+    ros::ServiceServer s6 = n.advertiseService("ask_return_permission", askReturnPermission);
+
+    ROS_INFO("Ready to hive bitchez.");
 
     ros::spin(); //spin the service as fast as you can
     return 0;

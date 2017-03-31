@@ -71,17 +71,17 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
     else if (!lockTarget) //if a target hasn't been locked lock it and enter a counting state while slowly driving forward.
     {
         lockTarget = true;
-        result.cmdVel = 0.18;
+        result.cmdVel = 0.25;
         result.angleError = 0.0;
         timeOut = true;
     }
-    else if (Td > 2.5) //raise the wrist
+    else if (Td > 2.7) //raise the wrist
     {
-        result.cmdVel = -0.35;
+        result.cmdVel = -0.30;
         result.angleError = 0.0;
         result.wristAngle = 0;
     }
-    else if (Td > 1.5) //close the fingers and drive forward with little speed
+    else if (Td > 1.1) //close the fingers and drive back with little speed
     {
         result.cmdVel = -0.1;
         result.angleError = 0.0;
@@ -89,7 +89,7 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
         return result;
     }
 
-    if (Td > 3.8 && timeOut) //if enough time has passed enter a recovery state to re-attempt a pickup
+    if (Td > 3.4 && timeOut) //if enough time has passed enter a recovery state to re-attempt a pickup
     {
         if (blockBlock) //if the ultrasound is blocked at less than .12 meters a block has been picked up no new pickup required
         {

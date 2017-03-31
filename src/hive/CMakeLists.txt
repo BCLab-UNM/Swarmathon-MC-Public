@@ -21,6 +21,7 @@ include_directories(
 add_executable(hive
 	src/HiveService.cpp
 	src/Robot.cpp
+	src/Cluster.cpp
 )
 
 add_dependencies(hive hive_srv_gencpp)
