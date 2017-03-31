@@ -191,6 +191,7 @@ bool checkForCubesInFront = false;
 int targetCounter = 0;
 bool stopCount = false;
 bool headingIsSet = false;
+bool headingCalculated = false;
 
 //all the obstacles that piled up that will be processed to return us to our path basically
 ObstacleStack interruptionsStack;
@@ -885,14 +886,48 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 }
             }
 
+            break;
         } case STATE_MACHINE_HEADING:{
+            if(!headingCalculated){
+                goalLocation.x = clusterLocation.x;
+                goalLocation.y = clusterLocation.y;
+                goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                headingCalculated = true;
+            }
+
+            float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
             //ROS_INFO("Going to heading");
-            //stateMachineState = STATE_MACHINE_TRANSFORM;
-            headingIsSet = false;
-        }
+            // If angle > 0.4 radians rotate but dont drive forward.
+            if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
+                // rotate but dont drive  0.05 is to prevent turning in reverse
+                sendDriveCommand(0.05, errorYaw);
+                //sendDriveCommand(0, errorYaw);
+                break;
+            } else {
+                float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
 
+                // goal not yet reached drive while maintaining proper heading.
+                if (fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x))) < M_PI_2) {
+                    // drive and turn simultaniously
+                    sendDriveCommand(searchVelocity, errorYaw/2);
+                }
+                // goal is reached but desired heading is still wrong turn only
+                else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
+                     // rotate but dont drive
+                    sendDriveCommand(0.0, errorYaw);
+                }
+                else {
+                    // stop
+                    sendDriveCommand(0.0, 0.0);
+                    //move back to transform step
+                    avoidingObstacle = false;
+                    stateMachineState = STATE_MACHINE_TRANSFORM;
+                    headingIsSet = false;
+                }
+                break;
+            }
 
-        default: {
+        } default: {
             break;
         }
 
