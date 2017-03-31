@@ -192,6 +192,7 @@ int targetCounter = 0;
 bool stopCount = false;
 bool headingIsSet = false;
 bool headingCalculated = false;
+bool timerSet = false;
 
 //all the obstacles that piled up that will be processed to return us to our path basically
 ObstacleStack interruptionsStack;
@@ -227,6 +228,7 @@ time_t timerStartTime;
 // average its location.
 unsigned int startDelayInSeconds = 1;
 float timerTimeElapsed = 0;
+float timerSearchCluster = 0;
 
 //Transforms
 tf::TransformListener *tfListener;
@@ -629,10 +631,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     break;
                 }
 
-                if(readyPos && dropPos){
+                if(readyPos || dropPos){
                     stateMachineState = STATE_MACHINE_ASK_FOR_DROP;
                     atReady = false;
-                } else {
+                } else if(headingIsSet){
+                    stateMachineState = STATE_MACHINE_HEADING;
+                    headingCalculated = false;
+                }else {
                     //move back to transform step
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                 }
@@ -648,6 +653,9 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             stateMachineMsg.data = "PICKUP";
 
             PickUpResult result;
+            //reset the heading state
+            headingIsSet = false;
+            timerSet = false;
 
             // we see a block and have not picked one up yet
             if (targetDetected && !targetCollected) {
@@ -702,8 +710,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     hive_srv::foundCluster srv;
                     srv.request.robotName = publishedName;
                     srv.request.targetCount = targetCounter;
-                    srv.request.posX = ((float)currentLocation.x);
-                    srv.request.posY = ((float)currentLocation.y);
+                    //calculate x and y 07 meters away to account for big clusters
+                    geometry_msgs::Pose2D clusterAt = currentLocation;
+                    clusterAt.theta = currentLocation.theta;
+                    clusterAt.x = currentLocation.x + ((0.7) * cos(clusterAt.theta)); //go to direction
+                    clusterAt.y = currentLocation.y + ((0.7) * sin(clusterAt.theta));
+                    srv.request.posX = ((float)clusterAt.x);
+                    srv.request.posY = ((float)clusterAt.y);
                     if(foundCluster.call(srv)){
                         //ROS_INFO("Found targets and told the server about it");
                         targetCounter = 0;
@@ -898,7 +911,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
             //ROS_INFO("Going to heading");
             // If angle > 0.4 radians rotate but dont drive forward.
-            if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
+            if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance && !timerSet) {
                 // rotate but dont drive  0.05 is to prevent turning in reverse
                 sendDriveCommand(0.05, errorYaw);
                 //sendDriveCommand(0, errorYaw);
@@ -907,22 +920,47 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
 
                 // goal not yet reached drive while maintaining proper heading.
-                if (fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x))) < M_PI_2) {
+                if (fabs(angles::shortest_angular_distance(currentLocation.theta, atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x))) < M_PI_2 && !timerSet) {
                     // drive and turn simultaniously
                     sendDriveCommand(searchVelocity, errorYaw/2);
                 }
                 // goal is reached but desired heading is still wrong turn only
-                else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
+                else if ((fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) && !timerSet) {
                      // rotate but dont drive
                     sendDriveCommand(0.0, errorYaw);
                 }
                 else {
-                    // stop
-                    sendDriveCommand(0.0, 0.0);
-                    //move back to transform step
-                    avoidingObstacle = false;
-                    stateMachineState = STATE_MACHINE_TRANSFORM;
-                    headingIsSet = false;
+                    if(!timerSet){
+                        timerStartTime = time(0);// start time for search
+                        timerSet = true;
+                    }
+
+                    if(timerTimeElapsed < 5){
+                        ROS_INFO("Searching For targets");
+                        sendDriveCommand(0, 0.4);
+                    } else if(timerTimeElapsed < 15){
+                        sendDriveCommand(0.3, 0.4);
+                    } else { //cluster was not found after search
+                        ROS_INFO("No Targets found");
+                        hive_srv::foundCluster srv;
+                        srv.request.robotName = publishedName;
+                        srv.request.targetCount = 0;
+                        srv.request.posX = ((float)clusterLocation.x);
+                        srv.request.posY = ((float)clusterLocation.y);
+                        if(foundCluster.call(srv)){
+                            //ROS_INFO("Found targets and told the server about it");
+                            targetCounter = 0;
+                        } else {
+                            ROS_INFO("Was not able to call the cluster service");
+                        }
+                        // stop
+                        sendDriveCommand(0.0, 0.0);
+                        //move back to transform step
+                        avoidingObstacle = false;
+                        stateMachineState = STATE_MACHINE_TRANSFORM;
+                        headingIsSet = false;
+                        timerSet = false;
+                    }
                 }
                 break;
             }

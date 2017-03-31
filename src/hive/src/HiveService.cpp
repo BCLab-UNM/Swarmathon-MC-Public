@@ -60,19 +60,32 @@ vector<Cluster> clusterList;
  * in the .srv file
 */
 bool notifyAboutCluster(hive_srv::foundCluster::Request &req, hive_srv::foundCluster::Response &res){
+    //find position adjust for the robot that is requesting
+    float x = 0; //x adjust
+    float y = 0; //y adjust
+    for(int j = 0; j<robotList.size(); j++){
+        //if the name is equal
+        if(((Robot)robotList[j]).name == ((string)req.robotName)){
+            x = ((Robot)robotList[j]).posAdjustX;
+            y = ((Robot)robotList[j]).posAdjustY;
+            break;
+        }
+    }
     //go through the list of clusters
     for(int i = 0; i<clusterList.size(); i++){
-        float existingClusterMinX = ((Cluster)clusterList[i]).clusterX - 1;
-        float existingClusterMaxX = ((Cluster)clusterList[i]).clusterX + 1;
+        float existingClusterMinX = ((Cluster)clusterList[i]).clusterX - 1.5;
+        float existingClusterMaxX = ((Cluster)clusterList[i]).clusterX + 1.5;
 
-        float existingClusterMinY = ((Cluster)clusterList[i]).clusterY - 1;
-        float existingClusterMaxY = ((Cluster)clusterList[i]).clusterY + 1;
+        float existingClusterMinY = ((Cluster)clusterList[i]).clusterY - 1.5;
+        float existingClusterMaxY = ((Cluster)clusterList[i]).clusterY + 1.5;
+
+
 
         //check if x is one meter away from the cluster
-        if(((float)req.posX) >= existingClusterMinX && ((float)req.posX) <= existingClusterMaxX){
+        if(((float)req.posX)-x >= existingClusterMinX && ((float)req.posX)-x <= existingClusterMaxX){
             //if it is one meter away
             //check of y is one away
-            if(((float)req.posY) >= existingClusterMinY && ((float)req.posY) <= existingClusterMaxY){
+            if(((float)req.posY)-y >= existingClusterMinY && ((float)req.posY)-y <= existingClusterMaxY){
                 //if it is then cluster is the same as in the list.
                 Cluster & c = clusterList[i];
                 if(req.targetCount>=6){
@@ -279,10 +292,30 @@ bool getHeading(hive_srv::getHeading::Request &req, hive_srv::getHeading::Respon
         for(int i = 0; i<clusterList.size(); i++){
             //find shortest distance heading
             double distance = fabs(hypot(((Cluster)clusterList[i]).clusterX - ((float)req.posX), ((Cluster)clusterList[i]).clusterY - ((float)req.posY)));
-            if(distance < shortestDistance){
+            if(((Cluster)clusterList[i]).robotThatFoundCluster == ""){
+                //there is no robot assigned. Can send
+                Cluster & c = clusterList[i];
+                c.robotThatFoundCluster = ((string)req.robotName);
                 shortesIndex = i;
+                break;
+            } else {
+                //check if distance is good
+                if(distance < shortestDistance){
+                    shortesIndex = i;
+                }
             }
         }
+
+        shortestDistance = 1000000000; //set big distance so that first element will deff have shorter distance
+        for(int i = 0; i<clusterList.size(); i++){
+            if(((Cluster)clusterList[i]).robotThatFoundCluster == ((string)req.robotName)){
+                double distance = fabs(hypot(((Cluster)clusterList[i]).clusterX - ((float)req.posX), ((Cluster)clusterList[i]).clusterY - ((float)req.posY)));
+                if(distance < shortestDistance){
+                    shortesIndex = i;
+                }
+            }
+        }
+
 
         //find position adjust for the robot that is requesting
         float x = 0; //x adjust
@@ -295,6 +328,8 @@ bool getHeading(hive_srv::getHeading::Request &req, hive_srv::getHeading::Respon
                 break;
             }
         }
+
+
 
         res.headingX = ((Cluster)clusterList[shortesIndex]).clusterX + x;
         res.headingY = ((Cluster)clusterList[shortesIndex]).clusterY + y;
