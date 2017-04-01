@@ -1061,7 +1061,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
         // if we see the center and we dont have a target collected
         if (centerSeen && !targetCollected) {
-                /*float centeringTurn = M_PI/2; //radians
+                float centeringTurn = 0.2; //radians
                 stateMachineState = STATE_MACHINE_TRANSFORM;
 
                 // this code keeps the robot from driving over
@@ -1080,7 +1080,7 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
                 goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
 
                 targetDetected = false;
-                pickUpController.reset();*/
+                pickUpController.reset();
 
             return;
         }
