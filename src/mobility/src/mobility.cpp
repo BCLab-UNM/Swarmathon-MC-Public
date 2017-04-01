@@ -477,20 +477,20 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                          ROS_INFO("Ask Permission server failed to call");
                     }
 
-                    //call the heading service
-                    hive_srv::getHeading srv2;
-                    srv2.request.robotName = publishedName;
-                    srv2.request.posX = currentLocation.x;
-                    srv2.request.posY = currentLocation.y;
-                    if(getHeading.call(srv2)){
-                        if(((bool)srv2.response.headingIsSet)){
-                            clusterLocation.x = ((float)srv2.response.headingX);
-                            clusterLocation.y = ((float)srv2.response.headingY);
-                            headingIsSet = true;
-                        }
-                    } else {
-                        ROS_INFO("Failed to get heading from server");
-                    }
+//                    //call the heading service
+//                    hive_srv::getHeading srv2;
+//                    srv2.request.robotName = publishedName;
+//                    srv2.request.posX = currentLocation.x;
+//                    srv2.request.posY = currentLocation.y;
+//                    if(getHeading.call(srv2)){
+//                        if(((bool)srv2.response.headingIsSet)){
+//                            clusterLocation.x = ((float)srv2.response.headingX);
+//                            clusterLocation.y = ((float)srv2.response.headingY);
+//                            headingIsSet = true;
+//                        }
+//                    } else {
+//                        ROS_INFO("Failed to get heading from server");
+//                    }
                 } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
                     goalLocation = currentLocation;
                     stateMachineState = STATE_MACHINE_ROTATE;
