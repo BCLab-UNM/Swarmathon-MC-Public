@@ -110,7 +110,16 @@ bool notifyAboutCluster(hive_srv::foundCluster::Request &req, hive_srv::foundClu
     //if for loop didnt have any clusters or the cluster found is a diferent location
     //create a new cluster
     //fid the robot in the robot list to get his offset
-
+    x = 0; //x adjust
+    y = 0; //y adjust
+    for(int i = 0; i<robotList.size(); i++){
+        //if the name is equal
+        if(((Robot)robotList[i]).name == ((string)req.robotName)){
+            x = ((Robot)robotList[i]).posAdjustX;
+            y = ((Robot)robotList[i]).posAdjustY;
+            break;
+        }
+    }
     //put an adjusted position cluster in list
     Cluster c((string)req.robotName, ((float)req.posX)-x, ((float)req.posY)-y, robotList.size());
     clusterList.push_back(c);

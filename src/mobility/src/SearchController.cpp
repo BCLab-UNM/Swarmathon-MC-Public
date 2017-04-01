@@ -4,7 +4,7 @@
 SearchController::SearchController() {
     rng = new random_numbers::RandomNumberGenerator();
     this->init = false;
-    this->prelim = true;
+    this->prelim = false;
     this->numOfItr = 0;
     this->ratio = 0;
     this->started = false;
@@ -38,10 +38,6 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
             startSearchWidth = srv.response.searchStartWidth;
             endSearchWidth = srv.response.searchEndWidth;
 
-            // if the startSearchWidth is 0, that means we're in a non prelim round
-            if (startSearchWidth != 0)
-                prelim = true;
-
             ROS_INFO("Values are set");
         }
         else {
@@ -62,7 +58,6 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
             ROS_INFO("Could not call position adjust client");
         }
 
-        ratio = startSearchWidth * 2;
 
         // this is assigning IDs to the rovers for non prelim rounds
         if((10* oTheta) >27)
@@ -88,6 +83,7 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
     // This block of code executes when there are only three rovers
     // this needs to be set back to true after testing ***
     if (prelim) {
+<<<<<<< HEAD
         if(numOfItr == 2){
             ratio += 0.5;
             numOfItr = 0;
@@ -237,6 +233,213 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
                 goalLocation.y = (currentLocation.y + 1);
                 goalLocation.x = (-goalLocation.y+shiftY);
                 goalLocation.theta =atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+=======
+
+            if(numOfItr == 2){
+
+                ratio += 0.5;
+
+                numOfItr = 0;
+
+            }
+
+            //check i = falsef we are at the starting location
+
+            if(!startingLocation){
+
+                switch(rover){
+
+                case 3:
+
+                    ratio=12;
+
+                    shiftX= -offShift; shiftY= 0;
+
+                    goalLocation.x = 6+shiftX; //go to start
+
+                    goalLocation.y = 0;
+
+                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
+                    break;
+
+                case 4:
+
+                    ratio=8;
+
+                    shiftX= 0; shiftY= offShift;
+
+                    goalLocation.x = -4; //go to start
+
+                    goalLocation.y = -3+offShift;
+
+                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
+                    break;
+
+                case 6:
+
+                    shiftX= offShift; shiftY= 0;
+
+                    ratio=4;
+
+                    goalLocation.x = -2+ shiftX; //go to start
+
+                    goalLocation.y = 1;
+
+                    goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
+                    break;
+
+                }
+
+                startingLocation=true;
+
+            } else { //if not at starting location
+
+                if(!started){ //if we just started we need to do half a ratio again
+
+                    switch(rover){
+
+                    case 3:
+
+                        goalLocation.x = 6+shiftX; //go to start
+
+                        goalLocation.y = 6;
+
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
+                        break;
+
+                    case 4:
+
+                        goalLocation.x = -4; //go to start neg neg
+
+                        goalLocation.y = -4+offShift;;
+
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
+                        break;
+
+                    case 6:
+
+                        goalLocation.x = -2+ shiftX; //go to start neg pos
+
+                        goalLocation.y = 2;
+
+                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+
+                        break;
+
+                    }
+
+                    started = true;
+
+                } else {
+
+                    switch(rover){
+
+                    case 3:
+
+                        if(currentLocation.theta>2) //looking west
+
+                            goalLocation.theta=-M_PI/2;
+
+                        else if(currentLocation.theta>1) //lookin north
+
+                            goalLocation.theta=M_PI;
+
+                        else if(currentLocation.theta>-1) //looking east
+
+                            goalLocation.theta=M_PI/2;
+
+                        else if(currentLocation.theta>-2) //looking south
+
+                            goalLocation.theta=0;
+
+                        else    //looking west
+
+                            goalLocation.theta=-M_PI/2;
+
+                        break;
+
+                    case 6:
+
+                        if(currentLocation.theta>2) //looking west
+
+                            goalLocation.theta=M_PI/2;
+
+                        else if(currentLocation.theta>1) //lookin north
+
+                            goalLocation.theta=0;
+
+                        else if(currentLocation.theta>-1) //looking east
+
+                            goalLocation.theta=-M_PI/2;
+
+                        else if(currentLocation.theta>-2) //looking south
+
+                            goalLocation.theta=M_PI;
+
+                        else    //looking west
+
+                            goalLocation.theta=M_PI/2;
+
+                        break;
+
+                    case 4:
+
+                        if(currentLocation.theta>2) //looking west
+
+                            goalLocation.theta=-M_PI/2;
+
+                        else if(currentLocation.theta>1) //lookin north
+
+                            goalLocation.theta=M_PI;
+
+                        else if(currentLocation.theta>-1) //looking east
+
+                            goalLocation.theta=M_PI/2;
+
+                        else if(currentLocation.theta>-2) //looking south
+
+                            goalLocation.theta=0;
+
+                        else    //looking west
+
+                            goalLocation.theta=-M_PI/2;
+
+                        break;
+
+                    }
+
+                    goalLocation.x = currentLocation.x + ((ratio) * cos(goalLocation.theta)); //go to direction
+
+                    goalLocation.y = currentLocation.y + ((ratio) * sin(goalLocation.theta));
+
+                    numOfItr++;
+
+                }
+
+            }
+
+        }
+
+    // for testing, i'm making this execute if prelim is TRUE cause my laptop cant handle 6 rovers ***
+    // this algorithm executes when there are 6 rovers
+    if (!prelim) {
+
+        //check if we are at the starting location
+        if(!startingLocation)
+        {
+            ROS_INFO("BEFORE STARTING LOCATION IF: ******rover # %d, ****** theta %f , **** x: %f , ******* y: %f ,",
+                     rover, (double)(goalLocation.theta), (double)(currentLocation.x), (double)(currentLocation.y));
+            switch(rover)
+            {
+            case 1: shiftX= 0; shiftY= -offShift; // (0,1)
+                goalLocation.x = 0 + shiftX;
+                goalLocation.y = 3 + shiftY;
+>>>>>>> fix
                 break;
             case 1:
                 goalLocation.y = (currentLocation.y + shiftY);
