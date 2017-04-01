@@ -384,7 +384,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     ROS_INFO("All good");
                     id = srv.response.robotIdInHive;
                 }else{
-                    ROS_ERROR("Fuck");
+                    ROS_ERROR("Fu*k");
                 }
                 pickUpController.setName(publishedName);
             } else {

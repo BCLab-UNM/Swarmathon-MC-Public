@@ -37,7 +37,7 @@ geometry_msgs::Pose2D SearchController::search(string robotName, geometry_msgs::
         if(setArenaClient.call(srv)){
             startSearchWidth = srv.response.searchStartWidth;
             endSearchWidth = srv.response.searchEndWidth;
-
+            this->prelim = srv.response.prelim;
             ROS_INFO("Values are set");
         }
         else {

@@ -207,6 +207,7 @@ bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &re
         float endSearchWidth = split * (robotList.size() - (id+1));
         res.searchStartWidth = startSearchWidth;
         res.searchEndWidth = endSearchWidth;
+        res.prelim = true;
         int robots = robotList.size();
         ROS_INFO("Start %f:, End: %f, ID: %d, RObots: %d ", startSearchWidth, endSearchWidth, id, robots);
     } else {
@@ -215,6 +216,7 @@ bool setArena(hive_srv::setArena::Request &req, hive_srv::setArena::Response &re
         float endSearchWidth = split * (robotList.size() - (id+1));
         res.searchStartWidth = startSearchWidth;
         res.searchEndWidth = endSearchWidth;
+        res.prelim = false;
         int robots = robotList.size();
         ROS_INFO("Start %f:, End: %f, ID: %d, RObots: %d ", startSearchWidth, endSearchWidth, id, robots);
     }
