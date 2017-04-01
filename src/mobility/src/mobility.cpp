@@ -835,6 +835,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             }
 
             if(dropPos){
+                timerSet = false;
                 targetCounter = 0;
                 stopCount = false;
                 ROS_INFO("Dropping");
@@ -863,7 +864,15 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         goalLocation.y = readyLocation.y;
                         goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
                         atReady = true;
+
+                        if(!timerSet){
+                            timerStartTime = time(0);// start time for search
+                            timerSet = true;
+                            ROS_INFO("Setting Timer ");
+                        }
+
                     }
+
 
                         float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
 
@@ -887,6 +896,20 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                                 sendDriveCommand(0.0, errorYaw);
                             }
                             else {
+                                if(timerTimeElapsed > 30){
+                                     timerSet = false;
+                                     targetCounter = 0;
+                                     stopCount = false;
+                                     ROS_INFO("Dropping");
+                                     goalLocation.x = newCenterLocation.x;
+                                     goalLocation.y = newCenterLocation.y;
+                                     goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
+                                     stateMachineState = STATE_MACHINE_ROTATE;
+                                     atReady = false;
+                                     dropPos = false;
+                                     readyPos = false;
+                                     break;
+                                }
                                 // stop
                                 sendDriveCommand(0.0, 0.0);
                                 //move back to transform step
