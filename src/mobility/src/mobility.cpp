@@ -157,6 +157,8 @@ bool calibratedOnCenter = false;
 bool calibratedOnStart = false;
 bool droveBack = false;
 
+bool weLostDawg = false;
+
 //position adjusting values. Used to create a new center
 float posAdjustX;
 float posAdjustY;
@@ -223,12 +225,16 @@ ros::Timer publish_heartbeat_timer;
 
 // records time for delays in sequanced actions, 1 second resolution.
 time_t timerStartTime;
+time_t timerClusterStart;
 
 // An initial delay to allow the rover to gather enough position data to 
 // average its location.
 unsigned int startDelayInSeconds = 1;
 float timerTimeElapsed = 0;
 float timerSearchCluster = 0;
+
+float timeSinceLastClusterRequest = 0;
+
 
 //Transforms
 tf::TransformListener *tfListener;
@@ -321,7 +327,8 @@ int main(int argc, char **argv) {
     msg.data = ss.str();
     infoLogPublisher.publish(msg);
 
-    timerStartTime = time(0); 
+    timerStartTime = time(0);
+    timerClusterStart = time(0);
 
     //create clients
     addRobotClient = mNH.serviceClient<hive_srv::hiveAddRobot>("hive_add_robot");
@@ -359,7 +366,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
         // time since timerStartTime was set to current time
         timerTimeElapsed = time(0) - timerStartTime;
-
+        timeSinceLastClusterRequest = time(0) - timerClusterStart;
 
 
         // init code goes here. (code that runs only once at start of
@@ -463,7 +470,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     // move back to transform step
                     stateMachineState = STATE_MACHINE_TRANSFORM;
                     reachedCollectionPoint = false;
-                    //centerLocationOdom = currentLocation;
+                    if(weLostDawg){
+                        newCenterLocation = currentLocation;
+                        weLostDawg = false;
+                    }
+
 
                     dropOffController.reset();
 
@@ -477,24 +488,15 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                          ROS_INFO("Ask Permission server failed to call");
                     }
 
-//                    //call the heading service
-//                    hive_srv::getHeading srv2;
-//                    srv2.request.robotName = publishedName;
-//                    srv2.request.posX = currentLocation.x;
-//                    srv2.request.posY = currentLocation.y;
-//                    if(getHeading.call(srv2)){
-//                        if(((bool)srv2.response.headingIsSet)){
-//                            clusterLocation.x = ((float)srv2.response.headingX);
-//                            clusterLocation.y = ((float)srv2.response.headingY);
-//                            headingIsSet = true;
-//                        }
-//                    } else {
-//                        ROS_INFO("Failed to get heading from server");
-//                    }
+
                 } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
-                    goalLocation = currentLocation;
+                    goalLocation.x = result.centerGoal.x;
+                    goalLocation.y = result.centerGoal.y;
+                    goalLocation.theta = atan2(result.centerGoal.y - currentLocation.y, result.centerGoal.x - currentLocation.x);
                     stateMachineState = STATE_MACHINE_ROTATE;
                     timerStartTime = time(0);
+                    weLostDawg = true;//set lost tag to true. So that if we find center we will save it
+                    break;
                 }
                 // we are in precision/timed driving
                 else {
@@ -553,6 +555,26 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
 
                 } else {
+                    //if 6 min passed since last cluster request
+                    if(timeSinceLastClusterRequest >= 360){
+                        timerClusterStart = time(0); //reset timer;
+                        //request cluster
+                        //call the heading service
+                        hive_srv::getHeading srv2;
+                        srv2.request.robotName = publishedName;
+                        srv2.request.posX = currentLocation.x;
+                        srv2.request.posY = currentLocation.y;
+                        if(getHeading.call(srv2)){
+                            if(((bool)srv2.response.headingIsSet)){
+                                clusterLocation.x = ((float)srv2.response.headingX);
+                                clusterLocation.y = ((float)srv2.response.headingY);
+                                headingIsSet = true;
+                            }
+                        } else {
+                            ROS_INFO("Failed to get heading from server");
+                        }
+
+                    }
                     // added another parameter, original theta
                    goalLocation = searchController.search(publishedName, centerLocationOdom, currentLocation, oTheta);
                 }
@@ -614,6 +636,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         posAdjustX = currentLocation.x;
                         posAdjustY = currentLocation.y;
                         newCenterLocation = currentLocation;
+                        centerLocationOdom = newCenterLocation;
                         hive_srv::calibrate srv;
                         srv.request.robotName = publishedName;
                         srv.request.calibratedOnCenter = calibratedOnCenter;
@@ -896,7 +919,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                                 sendDriveCommand(0.0, errorYaw);
                             }
                             else {
-                                if(timerTimeElapsed > 30){
+                                if(timerTimeElapsed > 25){
                                      timerSet = false;
                                      targetCounter = 0;
                                      stopCount = false;
@@ -1030,6 +1053,11 @@ void sendDriveCommand(double linearVel, double angularError)
  *************************/
 
 void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& message) {
+    float centerXmin = newCenterLocation.x - 1.5;
+    float centerYmin = newCenterLocation.y - 1.5;
+
+    float centerXmax = newCenterLocation.x + 1.5;
+    float centerYmax = newCenterLocation.y + 1.5;
 
     // If in manual mode do not try to automatically pick up the target
     if(!calibratedOnCenter || !droveBack) return;
@@ -1112,6 +1140,11 @@ void targetHandler(const apriltags_ros::AprilTagDetectionArray::ConstPtr& messag
 
     // found a target april tag and looking for april cubes;
     // with safety timer at greater than 5 seconds.
+    if((currentLocation.x >= centerXmin && currentLocation.x <= centerXmax) &&
+            (currentLocation.y >= centerYmin && currentLocation.y <= centerYmax) && !targetCollected){
+        return;
+    }
+
     PickUpResult result;
 
     if (message->detections.size() > 0 && !targetCollected && timerTimeElapsed > 5) {

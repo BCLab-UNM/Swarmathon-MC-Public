@@ -249,6 +249,7 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
         }
     }
 
+
     //if all robots are calibrated then see if return que is emty
     if(returnQ.empty()){
         ROS_INFO("Putting in que");
@@ -269,9 +270,13 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
                 if((string)(returnQ[i]) == (string)(req.robotName)){
                     //if in que just tell it to go to ready
                     //ROS_INFO("Robot is not first but in que. Dont drop but be ready");
-                    res.goDropOff = false;
-                    res.goToReadyPos = true;
-                    return true;
+                    if(!req.droppedOff){
+                        res.goDropOff = false;
+                        res.goToReadyPos = true;
+                        return true;
+                    } else {
+                        returnQ.clear();
+                    }
                 }
             }
             res.goDropOff = false;
