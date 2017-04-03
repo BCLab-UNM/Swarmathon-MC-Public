@@ -80,19 +80,19 @@ PickUpResult PickUpController::pickUpSelectedTarget(bool blockBlock) {
     }
     else if (Td > 2.7) //raise the wrist
     {
-        result.cmdVel = -0.30;
+        result.cmdVel = -0.3;
         result.angleError = 0.0;
         result.wristAngle = 0;
     }
     else if (Td > 1.1) //close the fingers and drive back with little speed
     {
-        result.cmdVel = -0.1;
+        result.cmdVel = -0.2;
         result.angleError = 0.0;
         result.fingerAngle = 0;
         return result;
     }
 
-    if (Td > 3.4 && timeOut) //if enough time has passed enter a recovery state to re-attempt a pickup
+    if (Td > 3.5 && timeOut) //if enough time has passed enter a recovery state to re-attempt a pickup
     {
         if (blockBlock) //if the ultrasound is blocked at less than .12 meters a block has been picked up no new pickup required
         {
