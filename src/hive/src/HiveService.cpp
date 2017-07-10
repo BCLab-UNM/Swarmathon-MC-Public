@@ -53,6 +53,7 @@ bool positionAdjusted = false;
 
 //return que
 deque <string> returnQ;
+ros::Time timeInFront;
 
 //cluster list
 vector<Cluster> clusterList;
@@ -257,6 +258,7 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
         //if robot is at readyPOS
         if(req.atReady){
             //put it in que
+            timeInFront = ros::Time::now();
             returnQ.push_back((string)(req.robotName));
         } else {
             //tell the robot to go to ready
@@ -264,21 +266,29 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
             res.goDropOff = false;
         }
     } else {
+        if(ros::Time::now().toSec() - timeInFront.toSec() >=15){
+            returnQ.pop_front();
+            timeInFront = ros::Time::now();
+        }
+
         //check if requested name matches the next robot in que
         if((string)(returnQ.front()) == (string)(req.robotName)){
             ROS_INFO("Robot is first. Is ready?");
             //check if robot is at ready pos
-
             res.goDropOff = true;
-            if((bool)(req.droppedOff)) //if robot dropped
+            if((bool)(req.droppedOff)) {//if robot dropped
                 returnQ.pop_front(); //pop it
+                timeInFront = ros::Time::now();
+            }
         } else {
             //check if requested name matches the first robot in Q
             if((string)(returnQ.front()) == (string)(req.robotName)){
                 ROS_INFO("Robot is first. Go Drop");
                 res.goDropOff = true;
-                if((bool)(req.droppedOff))
+                if((bool)(req.droppedOff)){
                     returnQ.pop_front();
+                    timeInFront = ros::Time::now();
+                }
             } else {
                 //check if robot is in the que
                 for(int i = 0; i< returnQ.size(); i++){

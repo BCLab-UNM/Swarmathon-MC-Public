@@ -41,6 +41,9 @@
 #include <ros/ros.h>
 #include <signal.h>
 
+//c++ time for
+#include "time.h"
+
 
 using namespace std;
 
@@ -501,13 +504,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     stateMachineState = STATE_MACHINE_ROTATE;
                     timerStartTime = time(0);
                     weLostDawg = true;//set lost tag to true. So that if we find center we will save it
-
-                    stringstream ss;
-                    ss << "Searching for center " << result.searchDistance << " "<< goalLocation.theta << endl;
-                    ss << "Goal x: "<< goalLocation.x << " Goal y: "<< goalLocation.y << endl;
-                    msg.data = ss.str();
-                    infoLogPublisher.publish(msg);
-
                     break;
                 }
                 // we are in precision/timed driving
