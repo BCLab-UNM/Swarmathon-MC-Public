@@ -176,6 +176,7 @@ double oTheta;
 bool readyPos = false;
 bool dropPos = false;
 bool atReady = false;
+bool atReadyStandby = false; //this variable tells the server if we are in a standby pos and can be placed in the que
 
 
 //DROP AND PICKUP STUFFS
@@ -478,11 +479,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                     dropOffController.reset();
 
-                    //set drop flag for front rover so others can calibrate.
+                    //set drop flag for front rover so others can drop.
                     hive_srv::askReturnPermission srv;
                     srv.request.droppedOff = true;
+                    srv.request.atReady = true;
                     srv.request.robotName = publishedName;
                     if(askReturnPermission.call(srv)){
+                        atReadyStandby = false;
                         ROS_INFO("Set drop off flag in server");
                     } else {
                          ROS_INFO("Ask Permission server failed to call");
@@ -521,12 +524,12 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                //if movement stack has interruptions
+
                 if(headingIsSet){
                     stateMachineState = STATE_MACHINE_HEADING;
                     break;
                 }
-
+                //if movement stack has interruptions
                 else if(!interruptionsStack.isEmpty()){
                     if(returnAfterDropOffSet){ //return to the location of a picked up cube
                         goalLocation.x = interruptionsStack.getInterruptedLocation().x;
@@ -653,11 +656,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     stateMachineState = STATE_MACHINE_CALIBRATE;
                     break;
                 }
-
+                //if we tried to drop or something and somehow ended up here then we did not finish the drop so go finish
                 if(readyPos || dropPos){
                     stateMachineState = STATE_MACHINE_ASK_FOR_DROP;
                     atReady = false;
-                } else if(headingIsSet){
+                } else if(headingIsSet){ //if we tried to go to cluster and did not finish
                     stateMachineState = STATE_MACHINE_HEADING;
                     headingCalculated = false;
                 }else {
@@ -843,11 +846,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             }
             break;
         }
-        //if calibration is done, move to starting positioin
         case STATE_MACHINE_ASK_FOR_DROP: {
             targetCounter = 0;
             hive_srv::askReturnPermission srv;
             srv.request.droppedOff = false;
+            srv.request.atReady = atReadyStandby;
             srv.request.robotName = publishedName;
             if(askReturnPermission.call(srv)){
                 readyPos = srv.response.goToReadyPos;
@@ -866,14 +869,15 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 goalLocation.y = newCenterLocation.y;
                 goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
                 stateMachineState = STATE_MACHINE_ROTATE;
+                atReadyStandby = false;
                 atReady = false;
                 dropPos = false;
                 readyPos = false;
 
             } else { //if cant drop
                 if(readyPos){ //maybe can get ready
-                    //calculate ready position. 1 metters from base.
-                    if(!atReady){ //if already go to ready position. dong go again. Stops them from circling around like idiots
+                    //calculate ready position. 1.5 metters from base. and set it
+                    if(!atReady){ //if already go to ready position. dont go again. Stops them from circling around like idiots
                         ROS_INFO("Go To ready");
                         geometry_msgs::Pose2D readyLocation;
                         //calculate theta to ready loc
@@ -888,11 +892,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
                         atReady = true;
 
-                        if(!timerSet){
+                        /*if(!timerSet){
                             timerStartTime = time(0);// start time for search
                             timerSet = true;
                             ROS_INFO("Setting Timer ");
-                        }
+                        }*/
 
                     }
 
@@ -905,7 +909,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                             sendDriveCommand(0.05, errorYaw);
                             //sendDriveCommand(0, errorYaw);
                             break;
-                        } else {
+                        } else { //drive to read and wait
                             float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
 
                             // goal not yet reached drive while maintaining proper heading.
@@ -917,9 +921,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                             else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
                                  // rotate but dont drive
                                 sendDriveCommand(0.0, errorYaw);
+
                             }
                             else {
-                                if(timerTimeElapsed > 25){
+                                //robot center return failsafe. Without it, if robot thats first in que is stuck,
+                                //every other robot wont move.
+
+                                /*if(timerTimeElapsed > 25){
                                      timerSet = false;
                                      targetCounter = 0;
                                      stopCount = false;
@@ -932,8 +940,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                                      dropPos = false;
                                      readyPos = false;
                                      break;
-                                }
-                                // stop
+                                }*/
+
+                                //set the robot to the entering que because it is at ready position
+                                atReadyStandby = true;
+                                // stop and wait for your turn
                                 sendDriveCommand(0.0, 0.0);
                                 //move back to transform step
                                 avoidingObstacle = false;
@@ -994,7 +1005,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         srv.request.posX = ((float)clusterLocation.x);
                         srv.request.posY = ((float)clusterLocation.y);
                         if(foundCluster.call(srv)){
-                            //ROS_INFO("Found targets and told the server about it");
                             targetCounter = 0;
                         } else {
                             ROS_INFO("Was not able to call the cluster service");
