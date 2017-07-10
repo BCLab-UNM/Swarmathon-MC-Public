@@ -406,7 +406,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         if (!targetCollected && !targetDetected) {
             // set gripper
             std_msgs::Float32 angle;
-
             // open fingers
             angle.data = M_PI_2;
 
@@ -492,13 +491,23 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
 
 
-                } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
-                    goalLocation.x = result.centerGoal.x;
-                    goalLocation.y = result.centerGoal.y;
-                    goalLocation.theta = atan2(result.centerGoal.y - currentLocation.y, result.centerGoal.x - currentLocation.x);
+                }
+                //this code is responsible for the center search if center is lost
+                else if (result.goalDriving && timerTimeElapsed >= 5 ) {
+                    //this of course assumes random walk continuation. Change for diffrent search methods.
+                    goalLocation.theta = currentLocation.theta + result.spinner;
+                    goalLocation.x = currentLocation.x + (result.searchDistance * cos(goalLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+                    goalLocation.y = currentLocation.y + (result.searchDistance * sin(goalLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
                     stateMachineState = STATE_MACHINE_ROTATE;
                     timerStartTime = time(0);
                     weLostDawg = true;//set lost tag to true. So that if we find center we will save it
+
+                    stringstream ss;
+                    ss << "Searching for center " << result.searchDistance << " "<< goalLocation.theta << endl;
+                    ss << "Goal x: "<< goalLocation.x << " Goal y: "<< goalLocation.y << endl;
+                    msg.data = ss.str();
+                    infoLogPublisher.publish(msg);
+
                     break;
                 }
                 // we are in precision/timed driving
@@ -883,8 +892,8 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         //calculate theta to ready loc
                         readyLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
                         readyLocation.theta = readyLocation.theta + M_PI; // ready location turned 180 degrees
-                        readyLocation.x = newCenterLocation.x + (1.5 * cos(readyLocation.theta)); //calculate where x and y will be in that dirrection
-                        readyLocation.y = newCenterLocation.y + (1.5 * sin(readyLocation.theta));
+                        readyLocation.x = newCenterLocation.x + (2 * cos(readyLocation.theta)); //calculate where x and y will be in that dirrection
+                        readyLocation.y = newCenterLocation.y + (2 * sin(readyLocation.theta));
 
                         //go to ready location
                         goalLocation.x = readyLocation.x;
