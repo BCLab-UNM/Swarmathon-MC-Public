@@ -545,10 +545,21 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
                     if(!interruptionsStack.isAtOldGoal()){
                         ROS_INFO("old goal");
-                        goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
-                        goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
-                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
-                        interruptionsStack.setOldGoal();
+                        //if old goal is outside the standby zone
+                        if(interruptionsStack.getGoalOfInterruption().x <= centerLocation.x - 1 && interruptionsStack.getGoalOfInterruption().x >= centerLocation.x + 1){
+                            if(interruptionsStack.getGoalOfInterruption().y <= centerLocation.y - 1 && interruptionsStack.getGoalOfInterruption().y >= centerLocation.y + 1){
+                                goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
+                                goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
+                                goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                                interruptionsStack.setOldGoal();
+                            }
+                            else{
+                               interruptionsStack.setOldGoal();
+                            }
+                        } else {
+                            interruptionsStack.setOldGoal();
+                        }
+
                         cantGetToGoal++;
                     } else if(!interruptionsStack.isLeveled()){
                         ROS_INFO("level");
@@ -1234,7 +1245,14 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
                 } else {
                     ROS_INFO("Collision first elements");
                     goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-                    interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+
+                    //if the goal is inside the standby zone dont set it to the stack
+                    if((goalLocation.x <= centerLocation.x - 1 && goalLocation.x >= centerLocation.x + 1) && (goalLocation.y <= centerLocation.y - 1 && goalLocation.y >= centerLocation.y + 1)){
+                        interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+                    } else {
+                        goalLocation.x = currentLocation.x;
+                        goalLocation.y = currentLocation.y;
+                    }
 
                 }
                 // switch to transform state to trigger collision avoidance

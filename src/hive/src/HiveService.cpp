@@ -266,10 +266,17 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
             res.goDropOff = false;
         }
     } else {
-        if(ros::Time::now().toSec() - timeInFront.toSec() >=15){
+
+        //check if this robot has been in the front of the que for 15 sec. If It was then pop
+        if(ros::Time::now().toSec() - timeInFront.toSec() >= 15){
             returnQ.pop_front();
             timeInFront = ros::Time::now();
+            if((string)(returnQ.front()) == (string)(req.robotName)){
+                res.goDropOff = true;
+            }
+            return true;
         }
+
 
         //check if requested name matches the next robot in que
         if((string)(returnQ.front()) == (string)(req.robotName)){
@@ -281,39 +288,30 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
                 timeInFront = ros::Time::now();
             }
         } else {
-            //check if requested name matches the first robot in Q
-            if((string)(returnQ.front()) == (string)(req.robotName)){
-                ROS_INFO("Robot is first. Go Drop");
-                res.goDropOff = true;
-                if((bool)(req.droppedOff)){
-                    returnQ.pop_front();
-                    timeInFront = ros::Time::now();
+            //check if robot is in the que
+            for(int i = 0; i< returnQ.size(); i++){
+                if((string)(returnQ[i]) == (string)(req.robotName)){
+                    //if in que just tell it to go to ready
+                    //ROS_INFO("Robot is not first but in que. Dont drop but be ready");
+                    res.goDropOff = false;
+                    res.goToReadyPos = true;
+                    return true;
                 }
-            } else {
-                //check if robot is in the que
-                for(int i = 0; i< returnQ.size(); i++){
-                    if((string)(returnQ[i]) == (string)(req.robotName)){
-                        //if in que just tell it to go to ready
-                        //ROS_INFO("Robot is not first but in que. Dont drop but be ready");
-                        res.goDropOff = false;
-                        res.goToReadyPos = true;
-                        return true;
-                    }
-                }
-
-                //if robot is not in the queue
-                //check if it is in a readyPOS
-                if(req.atReady){
-                    //put it in Q
-                    returnQ.push_back((string)(req.robotName));
-                    return true; //return
-                }
-                //if robot is not at ready tell it to go to ready
-                res.goDropOff = false;
-                res.goToReadyPos = true;
-
             }
+
+            //if robot is not in the queue
+            //check if it is in a readyPOS
+            if(req.atReady){
+                //put it in Q
+                returnQ.push_back((string)(req.robotName));
+                return true; //return
+            }
+            //if robot is not at ready tell it to go to ready
+            res.goDropOff = false;
+            res.goToReadyPos = true;
+
         }
+
     }
 
 
