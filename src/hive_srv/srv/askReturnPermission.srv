@@ -1,5 +1,6 @@
 string robotName
 bool droppedOff
+bool atReady
 ---
 bool goToReadyPos
 bool goDropOff

@@ -18,6 +18,10 @@ DropOffController::DropOffController() {
     result.reset = false;
     result.timer = false;
 
+    //search variables
+    result.searchDistance = 0.5;
+    result.spinner = M_PI/2; //90 deg
+
     left = false;
     right = false;
 
@@ -32,6 +36,9 @@ DropOffController::DropOffController() {
     prevCount = 0;
 
     searchVelocity = 0.25;
+
+
+
 }
 
 
@@ -85,16 +92,34 @@ void DropOffController::calculateDecision() {
     {
         //sets a goal that is 60cm from the centerLocation and spinner
         //radians counterclockwise from being purly along the x-axis.
-        result.centerGoal.x = centerLocation.x + (spinSize + addSpinSize) * cos(spinner);
-        result.centerGoal.y = centerLocation.y + (spinSize + addSpinSize) * sin(spinner);
-        result.centerGoal.theta = atan2(result.centerGoal.y - currentLocation.y, result.centerGoal.x - currentLocation.x);
+//        result.centerGoal.x = centerLocation.x + (spinSize + addSpinSize) * cos(spinner);
+//        result.centerGoal.y = centerLocation.y + (spinSize + addSpinSize) * sin(spinner);
+//        result.centerGoal.theta = atan2(result.centerGoal.y - currentLocation.y, result.centerGoal.x - currentLocation.x);
 
-        spinner += M_PI/4; //add 45 degrees in radians to spinner.
-        if (spinner > 2*M_PI)
+//        //this of course assumes random walk continuation. Change for diffrent search methods.
+//        result.centerGoal.theta = currentLocation.theta + spinner;
+//        result.centerGoal.x = currentLocation.x + (searchDistance * cos(currentLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+//        result.centerGoal.y = currentLocation.y + (searchDistance * sin(currentLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
+
+        //this is responsible for spiral search for center
+
+        if (spinner >= M_PI)
         {
-            spinner -= 2*M_PI;
-	    addSpinSize += addSpinSizeAmmount;
+            spinner = 0;
+            result.searchDistance = result.searchDistance + 0.5;
         }
+        spinner += result.spinner; //add 90 degrees in radians to spinner.
+
+
+
+
+
+//        spinner += M_PI/4; //add 45 degrees in radians to spinner.
+//        if (spinner > 2*M_PI)
+//        {
+//            spinner -= 2*M_PI;
+//        addSpinSize += addSpinSizeAmmount;
+//        }
         circularCenterSearching = true;
         //safety flag to prevent us trying to drive back to the
         //center since we have a block with us and the above point is

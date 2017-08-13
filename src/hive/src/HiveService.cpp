@@ -17,6 +17,9 @@
  *                  //return;
  *              }
  *
+ *
+ * manual manfffffual manul
+ *
  */
 //ros includes
 #include "ros/ros.h"
@@ -37,9 +40,9 @@ using namespace std;
 #include "hive_srv/calibrate.h"
 #include "hive_srv/getPosAdjust.h"
 #include "hive_srv/setArena.h"
-#include "hive_srv/askReturnPermission.h"
 #include "hive_srv/foundCluster.h"
 #include "hive_srv/getHeading.h"
+#include "hive_srv/askReturnPermission.h"
 
 //variables declaration
 vector<Robot> robotList;
@@ -50,6 +53,7 @@ bool positionAdjusted = false;
 
 //return que
 deque <string> returnQ;
+ros::Time timeInFront;
 
 //cluster list
 vector<Cluster> clusterList;
@@ -249,8 +253,69 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
         }
     }
 
+    //if Q is empty tell the first rover to just go to ready
+    if(returnQ.empty()){
+        //if robot is at readyPOS
+        if(req.atReady){
+            //put it in que
+            timeInFront = ros::Time::now();
+            returnQ.push_back((string)(req.robotName));
+        } else {
+            //tell the robot to go to ready
+            res.goToReadyPos = true;
+            res.goDropOff = false;
+        }
+    } else {
 
-    //if all robots are calibrated then see if return que is emty
+        //check if this robot has been in the front of the que for 15 sec. If It was then pop
+        if(ros::Time::now().toSec() - timeInFront.toSec() >= 15){
+            returnQ.pop_front();
+            timeInFront = ros::Time::now();
+            if((string)(returnQ.front()) == (string)(req.robotName)){
+                res.goDropOff = true;
+            }
+            return true;
+        }
+
+
+        //check if requested name matches the next robot in que
+        if((string)(returnQ.front()) == (string)(req.robotName)){
+            ROS_INFO("Robot is first. Is ready?");
+            //check if robot is at ready pos
+            res.goDropOff = true;
+            if((bool)(req.droppedOff)) {//if robot dropped
+                returnQ.pop_front(); //pop it
+                timeInFront = ros::Time::now();
+            }
+        } else {
+            //check if robot is in the que
+            for(int i = 0; i< returnQ.size(); i++){
+                if((string)(returnQ[i]) == (string)(req.robotName)){
+                    //if in que just tell it to go to ready
+                    //ROS_INFO("Robot is not first but in que. Dont drop but be ready");
+                    res.goDropOff = false;
+                    res.goToReadyPos = true;
+                    return true;
+                }
+            }
+
+            //if robot is not in the queue
+            //check if it is in a readyPOS
+            if(req.atReady){
+                //put it in Q
+                returnQ.push_back((string)(req.robotName));
+                return true; //return
+            }
+            //if robot is not at ready tell it to go to ready
+            res.goDropOff = false;
+            res.goToReadyPos = true;
+
+        }
+
+    }
+
+
+    /*//if all robots are calibrated then see if return que is emty
     if(returnQ.empty()){
         ROS_INFO("Putting in que");
         //tell the robot to go drop off
@@ -283,7 +348,7 @@ bool askReturnPermission(hive_srv::askReturnPermission::Request &req, hive_srv::
             res.goToReadyPos = true;
             returnQ.push_back((string)(req.robotName));
         }
-    }
+    }*/
     return true;
 }
 

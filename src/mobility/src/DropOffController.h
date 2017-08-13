@@ -14,6 +14,10 @@ struct DropOffResult {
     geometry_msgs::Pose2D centerGoal;
     bool reset;
     bool timer;
+    //center search variables
+    float searchDistance;
+    float spinner;
+
 };
 
 class DropOffController
@@ -76,7 +80,11 @@ private:
 
     float searchVelocity;
 
+
+
     void calculateDecision();
+
+
 
 
 };

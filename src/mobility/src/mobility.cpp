@@ -41,6 +41,9 @@
 #include <ros/ros.h>
 #include <signal.h>
 
+//c++ time for
+#include "time.h"
+
 
 using namespace std;
 
@@ -176,6 +179,7 @@ double oTheta;
 bool readyPos = false;
 bool dropPos = false;
 bool atReady = false;
+bool atReadyStandby = false; //this variable tells the server if we are in a standby pos and can be placed in the que
 
 
 //DROP AND PICKUP STUFFS
@@ -405,7 +409,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
         if (!targetCollected && !targetDetected) {
             // set gripper
             std_msgs::Float32 angle;
-
             // open fingers
             angle.data = M_PI_2;
 
@@ -478,21 +481,26 @@ void mobilityStateMachine(const ros::TimerEvent&) {
 
                     dropOffController.reset();
 
-                    //set drop flag for front rover so others can calibrate.
+                    //set drop flag for front rover so others can drop.
                     hive_srv::askReturnPermission srv;
                     srv.request.droppedOff = true;
+                    srv.request.atReady = true;
                     srv.request.robotName = publishedName;
                     if(askReturnPermission.call(srv)){
+                        atReadyStandby = false;
                         ROS_INFO("Set drop off flag in server");
                     } else {
                          ROS_INFO("Ask Permission server failed to call");
                     }
 
 
-                } else if (result.goalDriving && timerTimeElapsed >= 5 ) {
-                    goalLocation.x = result.centerGoal.x;
-                    goalLocation.y = result.centerGoal.y;
-                    goalLocation.theta = atan2(result.centerGoal.y - currentLocation.y, result.centerGoal.x - currentLocation.x);
+                }
+                //this code is responsible for the center search if center is lost
+                else if (result.goalDriving && timerTimeElapsed >= 5 ) {
+                    //this of course assumes random walk continuation. Change for diffrent search methods.
+                    goalLocation.theta = currentLocation.theta + result.spinner;
+                    goalLocation.x = currentLocation.x + (result.searchDistance * cos(goalLocation.theta)); //(remainingGoalDist * cos(oldGoalLocation.theta));
+                    goalLocation.y = currentLocation.y + (result.searchDistance * sin(goalLocation.theta)); //(remainingGoalDist * sin(oldGoalLocation.theta));
                     stateMachineState = STATE_MACHINE_ROTATE;
                     timerStartTime = time(0);
                     weLostDawg = true;//set lost tag to true. So that if we find center we will save it
@@ -521,12 +529,12 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             //Otherwise, drop off target and select new random uniform heading
             //If no targets have been detected, assign a new goal
             else if (!targetDetected && timerTimeElapsed > returnToSearchDelay) {
-                //if movement stack has interruptions
+
                 if(headingIsSet){
                     stateMachineState = STATE_MACHINE_HEADING;
                     break;
                 }
-
+                //if movement stack has interruptions
                 else if(!interruptionsStack.isEmpty()){
                     if(returnAfterDropOffSet){ //return to the location of a picked up cube
                         goalLocation.x = interruptionsStack.getInterruptedLocation().x;
@@ -537,10 +545,21 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     }
                     if(!interruptionsStack.isAtOldGoal()){
                         ROS_INFO("old goal");
-                        goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
-                        goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
-                        goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
-                        interruptionsStack.setOldGoal();
+                        //if old goal is outside the standby zone
+                        if(interruptionsStack.getGoalOfInterruption().x <= centerLocation.x - 1 && interruptionsStack.getGoalOfInterruption().x >= centerLocation.x + 1){
+                            if(interruptionsStack.getGoalOfInterruption().y <= centerLocation.y - 1 && interruptionsStack.getGoalOfInterruption().y >= centerLocation.y + 1){
+                                goalLocation.x = interruptionsStack.getGoalOfInterruption().x;
+                                goalLocation.y = interruptionsStack.getGoalOfInterruption().y;
+                                goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
+                                interruptionsStack.setOldGoal();
+                            }
+                            else{
+                               interruptionsStack.setOldGoal();
+                            }
+                        } else {
+                            interruptionsStack.setOldGoal();
+                        }
+
                         cantGetToGoal++;
                     } else if(!interruptionsStack.isLeveled()){
                         ROS_INFO("level");
@@ -653,11 +672,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                     stateMachineState = STATE_MACHINE_CALIBRATE;
                     break;
                 }
-
+                //if we tried to drop or something and somehow ended up here then we did not finish the drop so go finish
                 if(readyPos || dropPos){
                     stateMachineState = STATE_MACHINE_ASK_FOR_DROP;
                     atReady = false;
-                } else if(headingIsSet){
+                } else if(headingIsSet){ //if we tried to go to cluster and did not finish
                     stateMachineState = STATE_MACHINE_HEADING;
                     headingCalculated = false;
                 }else {
@@ -843,11 +862,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
             }
             break;
         }
-        //if calibration is done, move to starting positioin
         case STATE_MACHINE_ASK_FOR_DROP: {
             targetCounter = 0;
             hive_srv::askReturnPermission srv;
             srv.request.droppedOff = false;
+            srv.request.atReady = atReadyStandby;
             srv.request.robotName = publishedName;
             if(askReturnPermission.call(srv)){
                 readyPos = srv.response.goToReadyPos;
@@ -866,21 +885,22 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                 goalLocation.y = newCenterLocation.y;
                 goalLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
                 stateMachineState = STATE_MACHINE_ROTATE;
+                atReadyStandby = false;
                 atReady = false;
                 dropPos = false;
                 readyPos = false;
 
             } else { //if cant drop
                 if(readyPos){ //maybe can get ready
-                    //calculate ready position. 1 metters from base.
-                    if(!atReady){ //if already go to ready position. dong go again. Stops them from circling around like idiots
+                    //calculate ready position. 1.5 metters from base. and set it
+                    if(!atReady){ //if already go to ready position. dont go again. Stops them from circling around like idiots
                         ROS_INFO("Go To ready");
                         geometry_msgs::Pose2D readyLocation;
                         //calculate theta to ready loc
                         readyLocation.theta = atan2(newCenterLocation.y - currentLocation.y, newCenterLocation.x - currentLocation.x);
                         readyLocation.theta = readyLocation.theta + M_PI; // ready location turned 180 degrees
-                        readyLocation.x = newCenterLocation.x + (1.5 * cos(readyLocation.theta)); //calculate where x and y will be in that dirrection
-                        readyLocation.y = newCenterLocation.y + (1.5 * sin(readyLocation.theta));
+                        readyLocation.x = newCenterLocation.x + (2 * cos(readyLocation.theta)); //calculate where x and y will be in that dirrection
+                        readyLocation.y = newCenterLocation.y + (2 * sin(readyLocation.theta));
 
                         //go to ready location
                         goalLocation.x = readyLocation.x;
@@ -888,11 +908,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         goalLocation.theta = atan2(goalLocation.y - currentLocation.y, goalLocation.x - currentLocation.x);
                         atReady = true;
 
-                        if(!timerSet){
+                        /*if(!timerSet){
                             timerStartTime = time(0);// start time for search
                             timerSet = true;
                             ROS_INFO("Setting Timer ");
-                        }
+                        }*/
 
                     }
 
@@ -905,7 +925,7 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                             sendDriveCommand(0.05, errorYaw);
                             //sendDriveCommand(0, errorYaw);
                             break;
-                        } else {
+                        } else { //drive to read and wait
                             float errorYaw = angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta);
 
                             // goal not yet reached drive while maintaining proper heading.
@@ -917,9 +937,13 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                             else if (fabs(angles::shortest_angular_distance(currentLocation.theta, goalLocation.theta)) > rotateOnlyAngleTolerance) {
                                  // rotate but dont drive
                                 sendDriveCommand(0.0, errorYaw);
+
                             }
                             else {
-                                if(timerTimeElapsed > 25){
+                                //robot center return failsafe. Without it, if robot thats first in que is stuck,
+                                //every other robot wont move.
+
+                                /*if(timerTimeElapsed > 25){
                                      timerSet = false;
                                      targetCounter = 0;
                                      stopCount = false;
@@ -932,8 +956,11 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                                      dropPos = false;
                                      readyPos = false;
                                      break;
-                                }
-                                // stop
+                                }*/
+
+                                //set the robot to the entering que because it is at ready position
+                                atReadyStandby = true;
+                                // stop and wait for your turn
                                 sendDriveCommand(0.0, 0.0);
                                 //move back to transform step
                                 avoidingObstacle = false;
@@ -994,7 +1021,6 @@ void mobilityStateMachine(const ros::TimerEvent&) {
                         srv.request.posX = ((float)clusterLocation.x);
                         srv.request.posY = ((float)clusterLocation.y);
                         if(foundCluster.call(srv)){
-                            //ROS_INFO("Found targets and told the server about it");
                             targetCounter = 0;
                         } else {
                             ROS_INFO("Was not able to call the cluster service");
@@ -1219,7 +1245,14 @@ void obstacleHandler(const std_msgs::UInt8::ConstPtr& message) {
                 } else {
                     ROS_INFO("Collision first elements");
                     goalLocation = searchController.continueInterruptedSearch(currentLocation, goalLocation);
-                    interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+
+                    //if the goal is inside the standby zone dont set it to the stack
+                    if((goalLocation.x <= centerLocation.x - 1 && goalLocation.x >= centerLocation.x + 1) && (goalLocation.y <= centerLocation.y - 1 && goalLocation.y >= centerLocation.y + 1)){
+                        interruptionsStack.addToStack(currentLocation, goalLocation, reset, oldGoal);
+                    } else {
+                        goalLocation.x = currentLocation.x;
+                        goalLocation.y = currentLocation.y;
+                    }
 
                 }
                 // switch to transform state to trigger collision avoidance
